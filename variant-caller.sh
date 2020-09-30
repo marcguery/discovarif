@@ -65,7 +65,6 @@ if [ $doQual -eq 1 ];then
         $FASTQC -o "$QUALDIR" -t 2 "$r1" "$r2"
 
         ##Read trimming
-        echo "$TRIMDIR/$r1name".unpaired.gz
         $TRIMMOMATIC -trimlog "$TRIMDIR/log.txt" "$r1" "$r2" \
         "$TRIMDIR/$r1name".paired.gz "$TRIMDIR/$r1name".unpaired.gz \
         "$TRIMDIR/$r2name".paired.gz "$TRIMDIR/$r2name".unpaired.gz \
@@ -115,7 +114,6 @@ fi
 if [ $doVari -eq 1 ];then
     echo "VARIANT step"
     mkdir -p "$VARIANTDIR"
-    BAMFILES="$BAMBAIDIR"/*.sorted.bam
 
     for ((i = $startSample ; i < $endSample ; i++ ));do
         bamsorted=$(grep "${SAMPLES[$i]}" <(ls -1 $BAMFILES))

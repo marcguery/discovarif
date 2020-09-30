@@ -1,34 +1,112 @@
 #!/bin/bash
+#Full pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
-##############################PIPELINE##############################
 source config.sh
 
-#Quality and alignment with each sample
-./variant-caller.sh -qm -s 0:2 &
-./variant-caller.sh -qm -s 2:4 &
-./variant-caller.sh -qm -s 4:6 &
-./variant-caller.sh -qm -s 6:8 &
-./variant-caller.sh -qm -s 8:10 &
-./variant-caller.sh -qm -s 10:12 &
-./variant-caller.sh -qm -s 12:14 &
-wait
-exit 0
+##############################OPTIONS##############################
+usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
+declare -i doQmv=0
+declare -i doSnp=0
+declare -i doCnv=0
+declare -i doOth=0
+while getopts ":mscoh" o; do
+    case "${o}" in
+        m) # Launch quality/mapping/mpileup step.
+            doQmv=1
+            ;;
+        s) # Launch SNP/small INDEL step.
+            doSnp=1
+            ;;
+        c) # Launch CNV step.
+            doCnv=1
+            ;;
+        o) # Launch other variants step.
+            doOth=1
+            ;;
+        h | *) # Show help.
+            usage
+            ;;
+    esac
+done
+shift $((OPTIND-1))
+##############################-------##############################
 
-#Doing the mpileup with all the samples at once
-$BCFTOOLS mpileup --threads 7 -f $GENOME "$BAMBAIDIR"/*.sorted.bam -Ou -d 99999 -a DP,AD,SP | \
-$BCFTOOLS call -m -v -Ob -o "$VARIANTDIR/"all-samples.bcf
+##############################PIPELINE##############################
 
-$BCFTOOLS view --threads 7 -i '%QUAL>=10' "$VARIANTDIR/"all-samples.bcf > "$VARIANTDIR/"all-samples-Qual10.vcf
+####Quality and alignment with each sample####
+if [ $doQmv -eq 1 ];then
+    echo "Doing the Quality/mapping/variant step for each sample..."
+    ./variant-caller.sh -qm -s 0:2 &
+    ./variant-caller.sh -qm -s 2:4 &
+    ./variant-caller.sh -qm -s 4:6 &
+    ./variant-caller.sh -qm -s 6:8 &
+    ./variant-caller.sh -qm -s 8:10 &
+    ./variant-caller.sh -qm -s 10:12 &
+    ./variant-caller.sh -qm -s 12:14 &
+    wait
+    echo "Done the Quality/mapping/variant step for each sample!"
+fi
+########
 
-##SNP/INDEL filtering
+####SNP/small INDEL filtering####
+if [ $doSnp -eq 1 ];then
+    echo "Doing the SNPs/INDELs step..."
+    mkdir -p "$SNPDIR"
 
-$VARIF -vcf "$VARIANTDIR/"all-samples-Qual10.vcf -gff $GFF -fasta $GENOME \
---no-fixed --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.8 \
---ratio-no-alt 0.2 --csv "$VARIANTDIR/"all-samples-SNPs.csv
+    #Doing the mpileup with all the samples at once
+    $BCFTOOLS mpileup -f $GENOME "$BAMBAIDIR"/*.sorted.bam -Ou -d 99999 -a DP,AD,SP | \
+    $BCFTOOLS call -m -v -Ob -o "$SNPDIR"/all-samples.bcf
 
-##CNV
+    $BCFTOOLS view -i '%QUAL>=10' "$SNPDIR"/all-samples.bcf > "$SNPDIR"/all-samples-Qual10.vcf
 
-##Other variants
+    ##Filtering variants
+    $VARIF -vcf "$SNPDIR"/all-samples-Qual10.vcf -gff $GFF -fasta $GENOME \
+    --no-fixed --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.8 \
+    --ratio-no-alt 0.2 --csv "$SNPDIR"/filtered-SNPs-sINDELs.csv
+    echo "Done the SNPs/INDELs step!"
+fi
+########
+
+####CNV####
+if [ $doCnv -eq 1 ];then
+    ##Setup
+    echo "Doing the CNVs step..."
+    mkdir -p "$CNVDIR"/bed
+
+    echo "###Background preparation###"
+    echo "Getting chromosome sizes..."
+    $SAMTOOLS faidx $GENOME
+    cut -f1,2 $GENOME.fai > "$CNVDIR"/chrom.sizes
+    echo "Getting core genome..."
+    grep "Core" $INFOGENOME | cut -f1-3 > "$CNVDIR"/bed/3D7-core.bed
+
+    echo "Getting CDS coordinates..."
+    grep CDS $GFF | cut -f1,4,5 | sort -V > "$CNVDIR"/bed/cds.bed
+    $BEDTOOLS intersect -a "$CNVDIR"/bed/3D7-core.bed -b "$CNVDIR"/bed/cds.bed > "$CNVDIR"/bed/cds-core.bed
+
+    echo "Getting CDS perbase location..."
+    $BEDTOOLS genomecov -g "$CNVDIR"/chrom.sizes -i "$CNVDIR"/bed/cds.bed -dz | cut -f1,2 > "$CNVDIR"/bed/cds-perbase.bed
+    
+    ##Obtaining coverage files
+    ./coverage.sh -s 0:2 &
+    ./coverage.sh -s 2:4 &
+    ./coverage.sh -s 4:6 &
+    ./coverage.sh -s 6:8 &
+    ./coverage.sh -s 8:10 &
+    ./coverage.sh -s 10:12 &
+    ./coverage.sh -s 12:14 &
+    wait
+    echo "Done the CNVs step!"
+fi
+########
+
+####Other variants####
+if [ $doOth -eq 1 ];then
+    echo "Doing the Other variants step..."
+    mkdir -p "$DELLYDIR"
+    echo "Done the Other variants step!"
+fi
+########
 
 
 ##############################--------##############################
