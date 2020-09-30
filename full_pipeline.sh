@@ -96,6 +96,10 @@ if [ $doCnv -eq 1 ];then
     ./coverage.sh -s 10:12 &
     ./coverage.sh -s 12:14 &
     wait
+    
+    mkdir -p "$CNVDIR"/summary
+    Rscript get-cov.R "$CNVDIR" "-perbasecds-core.coverage" "$CNVDIR"/summary "-core-cov.tsv" "CNV_withoutAPI-MT.csv" "12_3d7_old_s11_merged"
+    
     echo "Done the CNVs step!"
 fi
 ########
