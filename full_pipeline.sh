@@ -98,7 +98,7 @@ if [ $doCnv -eq 1 ];then
     wait
     
     mkdir -p "$CNVDIR"/summary
-    Rscript get-cov.R "$CNVDIR" "-perbasecds-core.coverage" "$CNVDIR"/summary "-core-cov.tsv" "CNV_withoutAPI-MT.csv" "12_3d7_old_s11_merged"
+    ./get-cov.R "$CNVDIR" "-perbasecds-core.coverage" "$CNVDIR"/summary "-core-cov.tsv" "CNV_withoutAPI-MT.csv" $CONTROLNAME
     
     echo "Done the CNVs step!"
 fi
@@ -108,6 +108,7 @@ fi
 if [ $doOth -eq 1 ];then
     echo "Doing the Other variants step..."
     mkdir -p "$DELLYDIR"
+    ./DELLY-caller.sh
     echo "Done the Other variants step!"
 fi
 ########
