@@ -1,5 +1,13 @@
 #!/usr/local/R-3.6.0/bin/Rscript
+#Filter CNV variants (Thu  1 Oct 10:14:38 CEST 2020)
+
+##############################LIBRARIES##############################
+
 library(reshape2)
+
+##############################---------##############################
+
+##############################PARAMETERS##############################
 
 args <- commandArgs(trailingOnly=T)
 options(stringsAsFactors = F)
@@ -11,11 +19,15 @@ outcovpattern <- args[4]
 outsummary <- args[5]
 controlsample <- args[6]
 
-#Summary per sample
+##############################----------##############################
+
+##############################PIPELINE##############################
+
 coveragefiles <- dir(indir, pattern = incoveragepattern)
 ratiocds.05 <- data.frame()
+
 for (f in coveragefiles){
-    #Getting sumary on each CNV on each sample
+    ####Summary per sample####
     covname <- sub(incoveragepattern, outcovpattern, f)
     if (file.exists(paste(outdir, covname, sep="/"))){
         print(paste("Skipping", covname, "because file exists"))
@@ -29,9 +41,9 @@ for (f in coveragefiles){
         write.table(cov.cds, paste(outdir, covname, sep="/"), 
                     quote = F, sep="\t", col.names = F)
     }
-    
+    ########
 
-    #Merging all the data together
+    ####Merging all samples####
     mainname <- sub(incoveragepattern, "", f)
     mainname <- make.names(mainname)
     colnames(cov.cds)[ncol(cov.cds)] <- mainname
@@ -40,10 +52,11 @@ for (f in coveragefiles){
     }else {
         ratiocds.05 <- merge(ratiocds.05, cov.cds)
     }
+    ########
 
 }
 
-#####Coverage####
+#####Best CNVs####
 score_from_cov <- function(cdsRow, control){
   if (length(which(cdsRow >= 1.8))>=1 & cdsRow[control] < 1.5){
     multFac <- 1
@@ -67,3 +80,6 @@ ratiocds.05 <- ratiocds.05[with(ratiocds.05, order(V2, V3, V4)), ]
 ratiocds.05 <- ratiocds.05[ratiocds.05$score!=0 & ratiocds.05$V2!="Pf3D7_API_v3" & ratiocds.05$V2!="Pf_M76611",]
 write.csv(ratiocds.05, paste(outdir, outsummary, sep="/"), 
             quote = F, row.names = F)
+########
+
+##############################--------##############################

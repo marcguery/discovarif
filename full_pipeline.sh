@@ -36,13 +36,13 @@ shift $((OPTIND-1))
 ####Quality and alignment with each sample####
 if [ $doQmv -eq 1 ];then
     echo "Doing the Quality/mapping/variant step for each sample..."
-    ./variant-caller.sh -qm -s 0:2 &
-    ./variant-caller.sh -qm -s 2:4 &
-    ./variant-caller.sh -qm -s 4:6 &
-    ./variant-caller.sh -qm -s 6:8 &
-    ./variant-caller.sh -qm -s 8:10 &
-    ./variant-caller.sh -qm -s 10:12 &
-    ./variant-caller.sh -qm -s 12:14 &
+    ./mapper-caller.sh -qm -s 0:2 &
+    ./mapper-caller.sh -qm -s 2:4 &
+    ./mapper-caller.sh -qm -s 4:6 &
+    ./mapper-caller.sh -qm -s 6:8 &
+    ./mapper-caller.sh -qm -s 8:10 &
+    ./mapper-caller.sh -qm -s 10:12 &
+    ./mapper-caller.sh -qm -s 12:14 &
     wait
     echo "Done the Quality/mapping/variant step for each sample!"
 fi
@@ -87,18 +87,19 @@ if [ $doCnv -eq 1 ];then
     echo "Getting CDS perbase location..."
     $BEDTOOLS genomecov -g "$CNVDIR"/chrom.sizes -i "$CNVDIR"/bed/cds.bed -dz | cut -f1,2 > "$CNVDIR"/bed/cds-perbase.bed
     
-    ##Obtaining coverage files
-    ./coverage.sh -s 0:2 &
-    ./coverage.sh -s 2:4 &
-    ./coverage.sh -s 4:6 &
-    ./coverage.sh -s 6:8 &
-    ./coverage.sh -s 8:10 &
-    ./coverage.sh -s 10:12 &
-    ./coverage.sh -s 12:14 &
+    ##Obtaining cov files
+    ./get-cov.sh -s 0:2 &
+    ./get-cov.sh -s 2:4 &
+    ./get-cov.sh -s 4:6 &
+    ./get-cov.sh -s 6:8 &
+    ./get-cov.sh -s 8:10 &
+    ./get-cov.sh -s 10:12 &
+    ./get-cov.sh -s 12:14 &
     wait
     
+    ##Getting filtered CNVs
     mkdir -p "$CNVDIR"/summary
-    ./get-cov.R "$CNVDIR" "-perbasecds-core.coverage" "$CNVDIR"/summary "-core-cov.tsv" "CNV_withoutAPI-MT.csv" $CONTROLNAME
+    ./CNV-caller.R "$CNVDIR" "-perbasecds-core.coverage" "$CNVDIR"/summary "-core-cov.tsv" "CNV_withoutAPI-MT.csv" $CONTROLNAME
     
     echo "Done the CNVs step!"
 fi
@@ -112,6 +113,5 @@ if [ $doOth -eq 1 ];then
     echo "Done the Other variants step!"
 fi
 ########
-
 
 ##############################--------##############################
