@@ -60,7 +60,7 @@ if [ $doSnp -eq 1 ];then
     $BCFTOOLS view -i '%QUAL>=10' "$SNPDIR"/all-samples.bcf > "$SNPDIR"/all-samples-Qual10.vcf
 
     ##Filtering variants
-    $VARIF -vcf "$SNPDIR"/all-samples-Qual10.vcf -gff $GFF -fasta $GENOME \
+    $VARIF -vcf "$SNPDIR"/all-samples-Qual10.vcf -gff "$GFF" -fasta "$GENOME" \
     --no-fixed --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.8 \
     --ratio-no-alt 0.2 --csv "$SNPDIR"/filtered-SNPs-sINDELs.csv
     echo "Done the SNPs/INDELs step!"
@@ -75,10 +75,10 @@ if [ $doCnv -eq 1 ];then
 
     echo "###Background preparation###"
     echo "Getting chromosome sizes..."
-    $SAMTOOLS faidx $GENOME
-    cut -f1,2 $GENOME.fai > "$CNVDIR"/chrom.sizes
+    $SAMTOOLS faidx "$GENOME"
+    cut -f1,2 "$GENOME".fai > "$CNVDIR"/chrom.sizes
     echo "Getting core genome..."
-    grep "Core" $INFOGENOME | cut -f1-3 > "$CNVDIR"/bed/3D7-core.bed
+    grep "Core" "$INFOGENOME" | cut -f1-3 > "$CNVDIR"/bed/3D7-core.bed
 
     echo "Getting CDS coordinates..."
     grep CDS $GFF | cut -f1,4,5 | sort -V > "$CNVDIR"/bed/cds.bed
