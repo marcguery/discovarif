@@ -71,30 +71,30 @@ fi
 if [ $doCnv -eq 1 ];then
     ##Setup
     echo "Doing the CNVs step..."
-    mkdir -p "$CNVDIR"/bed
+    mkdir -p "$CNVDIR"/view
 
     echo "###Background preparation###"
     echo "Getting chromosome sizes..."
     $SAMTOOLS faidx "$GENOME"
     cut -f1,2 "$GENOME".fai > "$CNVDIR"/chrom.sizes
     echo "Getting core genome..."
-    grep "Core" "$INFOGENOME" | cut -f1-3 > "$CNVDIR"/bed/3D7-core.bed
+    grep "Core" "$INFOGENOME" | cut -f1-3 > "$CNVDIR"/view/3D7-core.bed
 
     echo "Getting CDS coordinates..."
-    grep CDS $GFF | cut -f1,4,5 | sort -V > "$CNVDIR"/bed/cds.bed
-    $BEDTOOLS intersect -a "$CNVDIR"/bed/3D7-core.bed -b "$CNVDIR"/bed/cds.bed > "$CNVDIR"/bed/cds-core.bed
+    grep CDS $GFF | cut -f1,4,5 | sort -V > "$CNVDIR"/view/cds.bed
+    $BEDTOOLS intersect -a "$CNVDIR"/view/3D7-core.bed -b "$CNVDIR"/view/cds.bed > "$CNVDIR"/view/cds-core.bed
 
     echo "Getting CDS perbase location..."
-    $BEDTOOLS genomecov -g "$CNVDIR"/chrom.sizes -i "$CNVDIR"/bed/cds.bed -dz | cut -f1,2 > "$CNVDIR"/bed/cds-perbase.bed
+    $BEDTOOLS genomecov -g "$CNVDIR"/chrom.sizes -i "$CNVDIR"/view/cds.bed -dz | cut -f1,2 > "$CNVDIR"/view/cds-perbase.bed
     
     ##Obtaining cov files
-    ./get-cov.sh -s 0:2 &
-    ./get-cov.sh -s 2:4 &
-    ./get-cov.sh -s 4:6 &
-    ./get-cov.sh -s 6:8 &
-    ./get-cov.sh -s 8:10 &
-    ./get-cov.sh -s 10:12 &
-    ./get-cov.sh -s 12:14 &
+    ./get-coverage.sh -s 0:2 &
+    ./get-coverage.sh -s 2:4 &
+    ./get-coverage.sh -s 4:6 &
+    ./get-coverage.sh -s 6:8 &
+    ./get-coverage.sh -s 8:10 &
+    ./get-coverage.sh -s 10:12 &
+    ./get-coverage.sh -s 12:14 &
     wait
     
     ##Getting filtered CNVs
