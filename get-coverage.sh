@@ -42,34 +42,44 @@ for ((i = $startSample ; i < $endSample ; i++ ));do
 	echo "Processing sample ${SAMPLES[$i]}..."
 	if [ ! -f "$CNVDIR/$samplename"-cds-core.coverage ];then
 		echo "Creating CDS coverage file..."
-		$BEDTOOLS coverage -a "$CNVDIR"/bed/cds.bed -b "$bamsorted" > "$CNVDIR/$samplename"-cds.coverage
-		$BEDTOOLS coverage -a "$CNVDIR"/bed/cds-core.bed -b "$bamsorted" > "$CNVDIR/$samplename"-cds-core.coverage
+		$BEDTOOLS coverage -a "$CNVDIR"/view/cds.bed -b "$bamsorted" > "$CNVDIR/$samplename"-cds.coverage
+		$BEDTOOLS coverage -a "$CNVDIR"/view/cds-core.bed -b "$bamsorted" > "$CNVDIR/$samplename"-cds-core.coverage
 	fi
 	
 	if [ ! -f "$CNVDIR"/"$samplename"-perbasecds-core.coverage ];then
 		echo "Creating perbase CDS coverage file..."
-		$BEDTOOLS coverage -a "$CNVDIR"/bed/cds.bed -b "$bamsorted" -d > "$CNVDIR/$samplename-"perbasecds.coverage
-		$BEDTOOLS coverage -a "$CNVDIR"/bed/cds-core.bed -b "$bamsorted" -d > "$CNVDIR/$samplename"-perbasecds-core.coverage
+		$BEDTOOLS coverage -a "$CNVDIR"/view/cds.bed -b "$bamsorted" -d > "$CNVDIR/$samplename-"perbasecds.coverage
+		$BEDTOOLS coverage -a "$CNVDIR"/view/cds-core.bed -b "$bamsorted" -d > "$CNVDIR/$samplename"-perbasecds-core.coverage
 	fi
 	
-	if [ ! -f "$CNVDIR"/bed/"$samplename"-perbase.bed -a ! -f "$CNVDIR"/bed/"$samplename"-perbasecds.bed -a ! -f "$CNVDIR"/bed/"$samplename"-perbaseinter.bed ];then
+	if [ ! -f "$CNVDIR"/view/"$samplename"-perbase.bed -a ! -f "$CNVDIR"/view/"$samplename"-perbasecds.bed -a ! -f "$CNVDIR"/view/"$samplename"-perbaseinter.bed ];then
 		echo "Creating whole perbase file..."
-		$BEDTOOLS genomecov -ibam "$bamsorted" -g "$CNVDIR"/chrom.sizes -d > "$CNVDIR"/bed/"$samplename"-perbase.bed
+		$BEDTOOLS genomecov -ibam "$bamsorted" -g "$CNVDIR"/chrom.sizes -d > "$CNVDIR"/view/"$samplename"-perbase.bed
 	fi
 
-	if [ ! -f "$CNVDIR"/bed/"$samplename"-perbasecds.bed ];then
-		echo "Creating CDS perbase file..."
-		awk 'FNR==NR{a[$1" "$2]++}FNR!=NR && a[$1" "$2]{print}' "$CNVDIR"/bed/cds-perbase.bed "$CNVDIR"/bed/"$samplename"-perbase.bed > "$CNVDIR"/bed/"$samplename"-perbasecds.bed
+	if [ ! -f "$CNVDIR"/view/"$samplename"-perbasecds.bed ];then
+		echo "Creating CDS perbase BED file..."
+		awk 'FNR==NR{a[$1" "$2]++}FNR!=NR && a[$1" "$2]{print}' "$CNVDIR"/view/cds-perbase.bed "$CNVDIR"/view/"$samplename"-perbase.bed > "$CNVDIR"/view/"$samplename"-perbasecds.bed
 	fi
 	
-	if [ ! -f "$CNVDIR"/bed/"$samplename"-perbaseinter.bed ];then
-		echo "Creating intergenic perbase file..."
-		awk 'FNR==NR{a[$1" "$2]++}FNR!=NR && !a[$1" "$2]{print}' "$CNVDIR"/bed/cds-perbase.bed "$CNVDIR"/bed/"$samplename"-perbase.bed > "$CNVDIR"/bed/"$samplename"-perbaseinter.bed
+	if [ ! -f "$CNVDIR"/view/"$samplename"-perbaseinter.bed ];then
+		echo "Creating intergenic perbase BED file..."
+		awk 'FNR==NR{a[$1" "$2]++}FNR!=NR && !a[$1" "$2]{print}' "$CNVDIR"/view/cds-perbase.bed "$CNVDIR"/view/"$samplename"-perbase.bed > "$CNVDIR"/view/"$samplename"-perbaseinter.bed
+	fi
+
+	if [ ! -f "$CNVDIR"/view/"$samplename"-perbasecds.bg ];then
+		echo "Creating CDS perbase BG file..."
+		awk '{sum=$2+1} { printf("%s\t%s\t%i\t%s\n",$1,$2,sum,$3); }' "$CNVDIR"/view/"$samplename"-perbasecds.bed > "$CNVDIR"/view/"$samplename"-perbasecds.bg
 	fi
 	
-	if [ -f "$CNVDIR"/bed/"$samplename"-perbase.bed -a -f "$CNVDIR"/bed/"$samplename"-perbasecds.bed -a -f "$CNVDIR"/bed/"$samplename"-perbaseinter.bed ];then
+	if [ ! -f "$CNVDIR"/view/"$samplename"-perbaseinter.bg ];then
+		echo "Creating intergenic perbase BG file..."
+		awk '{sum=$2+1} { printf("%s\t%s\t%i\t%s\n",$1,$2,sum,$3); }' "$CNVDIR"/view/"$samplename"-perbaseinter.bed > "$CNVDIR"/view/"$samplename"-perbaseinter.bg
+	fi
+	
+	if [ -f "$CNVDIR"/view/"$samplename"-perbase.bed -a -f "$CNVDIR"/view/"$samplename"-perbasecds.bed -a -f "$CNVDIR"/view/"$samplename"-perbaseinter.bed ];then
 		echo "Removing unecessary files..."
-		rm "$CNVDIR"/bed/"$samplename"-perbase.bed
+		rm "$CNVDIR"/view/"$samplename"-perbase.bed
 	fi
 	echo "Done with sample ${SAMPLES[$i]}!"
 done
