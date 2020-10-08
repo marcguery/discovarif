@@ -71,6 +71,11 @@ for ((i = $startSample ; i < $endSample ; i++ ));do
 		echo "Creating CDS perbase BG file..."
 		awk '{sum=$2+1} { printf("%s\t%s\t%i\t%s\n",$1,$2,sum,$3); }' "$CNVDIR"/view/"$samplename"-perbasecds.bed > "$CNVDIR"/view/"$samplename"-perbasecds.bg
 	fi
+
+	if [ ! -f "$CNVDIR"/view/"$samplename"-perbasecds.bw ];then
+		echo "Creating CDS perbase BW file..."
+		bedGraphToBigWig "$CNVDIR"/view/"$samplename"-perbasecds.bg "$CNVDIR"/chrom.sizes "$CNVDIR"/view/"$samplename"-perbasecds.bw
+	fi
 	
 	if [ ! -f "$CNVDIR"/view/"$samplename"-perbaseinter.bg ];then
 		echo "Creating intergenic perbase BG file..."

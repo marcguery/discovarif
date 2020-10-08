@@ -57,8 +57,8 @@ if [ $doQual -eq 1 ];then
         r2=$(grep "${SAMPLES[$i]}" <(ls -1 $READS) | grep "${PAIREDIDS[1]}")
         [ -z "$r1" -o -z "$r2" ] && \
         { echo "Sample ${SAMPLES[$i]} does not match $READS"; continue; }
-        r1name=$(cut -d"." -f1 <(basename $r1))
-        r2name=$(cut -d"." -f1 <(basename $r2))
+        r1name=$(cut -d"." -f1 <(basename "$r1"))
+        r2name=$(cut -d"." -f1 <(basename "$r2"))
         echo "Processing sample ${SAMPLES[$i]}..."
 
         ##Quality raw reads
@@ -90,7 +90,7 @@ if [ $doMapp -eq 1 ];then
         r2=$(grep "${SAMPLES[$i]}" <(ls -1 $TRIMREADS) | grep "${PAIREDIDS[1]}")
         [ -z "$r1" -o -z "$r2" ] && \
         { echo "Sample ${SAMPLES[$i]} does not match $TRIMREADS"; continue; }
-        samplename=$(cut -d"." -f1 <(basename $r1) | sed -e 's/'${PAIREDIDS[0]}'//g')
+        samplename=$(cut -d"." -f1 <(basename "$r1") | sed -e 's/'${PAIREDIDS[0]}'//g')
         
         echo "Processing sample ${SAMPLES[$i]}..."
         sam="$samplename".sam
