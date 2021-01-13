@@ -1,6 +1,5 @@
 #!/bin/bash
 #Full pipeline (Wed 30 Sep 11:12:18 CEST 2020)
-
 source config.sh
 
 ##############################OPTIONS##############################
@@ -11,8 +10,9 @@ declare -i doCnv=0
 declare -i doOth=0
 while getopts ":mscoh" o; do
     case "${o}" in
-        m) # Launch quality/mapping/mpileup step.
+        m) # Launch quality/mapping/mpileup step (NOT AVAILABLE).
             doQmv=1
+            usage
             ;;
         s) # Launch SNP/small INDEL step.
             doSnp=1
@@ -54,15 +54,22 @@ if [ $doSnp -eq 1 ];then
     mkdir -p "$SNPDIR"
 
     #Doing the mpileup with all the samples at once
-    $BCFTOOLS mpileup -f $GENOME "$BAMBAIDIR"/*.sorted.bam -Ou -d 99999 -a DP,AD,SP | \
+    $BCFTOOLS mpileup -f $GENOME $BAMFILES -Ou -d 99999 -a DP,AD,SP | \
     $BCFTOOLS call -m -v -Ob -o "$SNPDIR"/all-samples.bcf
 
+    $BCFTOOLS view "$SNPDIR"/all-samples.bcf > "$SNPDIR"/all-samples.vcf
     $BCFTOOLS view -i '%QUAL>=10' "$SNPDIR"/all-samples.bcf > "$SNPDIR"/all-samples-Qual10.vcf
 
     ##Filtering variants
+    $VARIF -vcf "$SNPDIR"/all-samples.vcf -gff "$GFF" -fasta "$GENOME" \
+    --no-fixed --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.8 \
+    --ratio-no-alt 0.2 --csv "$SNPDIR"/filtered-SNPs-sINDELs.csv \
+    --filteredvcf "$SNPDIR"/filtered-SNPs-sINDELs.vcf
+
     $VARIF -vcf "$SNPDIR"/all-samples-Qual10.vcf -gff "$GFF" -fasta "$GENOME" \
     --no-fixed --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.8 \
-    --ratio-no-alt 0.2 --csv "$SNPDIR"/filtered-SNPs-sINDELs.csv
+    --ratio-no-alt 0.2 --csv "$SNPDIR"/filtered-SNPs-sINDELs-Qual10.csv \
+    --filteredvcf "$SNPDIR"/filtered-SNPs-sINDELs-Qual10.vcf
     echo "Done the SNPs/INDELs step!"
 fi
 ########
