@@ -8,7 +8,8 @@ declare -i doQmv=0
 declare -i doSnp=0
 declare -i doCnv=0
 declare -i doOth=0
-while getopts ":mscoh" o; do
+declare -i maxthreads=1
+while getopts ":mscot:h" o; do
     case "${o}" in
         m) # Launch quality/mapping/mpileup step (NOT AVAILABLE).
             doQmv=1
@@ -23,12 +24,16 @@ while getopts ":mscoh" o; do
         o) # Launch other variants step.
             doOth=1
             ;;
+        t) # Launch this number of processes in parallel
+            maxthreads=$((OPTARG))
+            ;;
         h | *) # Show help.
             usage
             ;;
     esac
 done
 shift $((OPTIND-1))
+[ $maxthreads -gt $SAMPLENUM ] && { maxthreads=$SAMPLENUM; }
 ##############################-------##############################
 
 ##############################PIPELINE##############################
@@ -36,13 +41,16 @@ shift $((OPTIND-1))
 ####Quality and alignment with each sample####
 if [ $doQmv -eq 1 ];then
     echo "Doing the Quality/mapping/variant step for each sample..."
-    ./mapper-caller.sh -qm -s 0:2 &
-    ./mapper-caller.sh -qm -s 2:4 &
-    ./mapper-caller.sh -qm -s 4:6 &
-    ./mapper-caller.sh -qm -s 6:8 &
-    ./mapper-caller.sh -qm -s 8:10 &
-    ./mapper-caller.sh -qm -s 10:12 &
-    ./mapper-caller.sh -qm -s 12:14 &
+    numsamples=$(bc <<< $SAMPLENUM/$maxthreads)
+    number=0
+    while [ $number -lt $(($SAMPLENUM-$numsamples)) ];do
+        nextid=$(($number+$numsamples))
+        echo "New batch: ${SAMPLES[$number]} to ${SAMPLES[$((nextid-1))]}"
+        ./mapper-caller.sh -qm -s $number:$nextid &
+        number=$nextid
+    done
+    echo "New batch: ${SAMPLES[$number]} to ${SAMPLES[$(($SAMPLENUM-1))]}"
+    ./mapper-caller.sh -qm -s $number:$SAMPLENUM &
     wait
     echo "Done the Quality/mapping/variant step for each sample!"
 fi
@@ -61,14 +69,15 @@ if [ $doSnp -eq 1 ];then
     $BCFTOOLS view -i '%QUAL>=10' "$SNPDIR"/all-samples.bcf > "$SNPDIR"/all-samples-Qual10.vcf
 
     ##Filtering variants
-    $VARIF -vcf "$SNPDIR"/all-samples.vcf -gff "$GFF" -fasta "$GENOME" \
-    --no-fixed --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.8 \
-    --ratio-no-alt 0.2 --csv "$SNPDIR"/filtered-SNPs-sINDELs.csv \
+    #In renamed vcf files, sample names replace file paths
+    $VARIF -vcf "$SNPDIR"/all-samples-renamed.vcf -gff "$GFF" -fasta "$GENOME" \
+    --no-fixed --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.6 \
+    --ratio-no-alt 0.4 --csv "$SNPDIR"/filtered-SNPs-sINDELs.csv \
     --filteredvcf "$SNPDIR"/filtered-SNPs-sINDELs.vcf
 
-    $VARIF -vcf "$SNPDIR"/all-samples-Qual10.vcf -gff "$GFF" -fasta "$GENOME" \
-    --no-fixed --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.8 \
-    --ratio-no-alt 0.2 --csv "$SNPDIR"/filtered-SNPs-sINDELs-Qual10.csv \
+    $VARIF -vcf "$SNPDIR"/all-samples-Qual10-renamed.vcf -gff "$GFF" -fasta "$GENOME" \
+    --no-fixed --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.6 \
+    --ratio-no-alt 0.4 --csv "$SNPDIR"/filtered-SNPs-sINDELs-Qual10.csv \
     --filteredvcf "$SNPDIR"/filtered-SNPs-sINDELs-Qual10.vcf
     echo "Done the SNPs/INDELs step!"
 fi
@@ -76,33 +85,36 @@ fi
 
 ####CNV####
 if [ $doCnv -eq 1 ];then
-    ##Setup
-    echo "Doing the CNVs step..."
-    mkdir -p "$CNVDIR"/view
+    # ##Setup
+    # echo "Doing the CNVs step..."
+    # mkdir -p "$CNVDIR"/view
 
-    echo "###Background preparation###"
-    echo "Getting chromosome sizes..."
-    $SAMTOOLS faidx "$GENOME"
-    cut -f1,2 "$GENOME".fai > "$CNVDIR"/chrom.sizes
-    echo "Getting core genome..."
-    grep "Core" "$INFOGENOME" | cut -f1-3 > "$CNVDIR"/view/3D7-core.bed
+    # echo "###Background preparation###"
+    # echo "Getting chromosome sizes..."
+    # $SAMTOOLS faidx "$GENOME"
+    # cut -f1,2 "$GENOME".fai > "$CNVDIR"/chrom.sizes
+    # echo "Getting core genome..."
+    # grep "Core" "$INFOGENOME" | cut -f1-3 > "$CNVDIR"/view/3D7-core.bed
 
-    echo "Getting CDS coordinates..."
-    grep CDS $GFF | cut -f1,4,5 | sort -V > "$CNVDIR"/view/cds.bed
-    $BEDTOOLS intersect -a "$CNVDIR"/view/3D7-core.bed -b "$CNVDIR"/view/cds.bed > "$CNVDIR"/view/cds-core.bed
+    # echo "Getting CDS coordinates..."
+    # grep CDS $GFF | cut -f1,4,5 | sort -V > "$CNVDIR"/view/cds.bed
+    # $BEDTOOLS intersect -a "$CNVDIR"/view/3D7-core.bed -b "$CNVDIR"/view/cds.bed > "$CNVDIR"/view/cds-core.bed
 
-    echo "Getting CDS perbase location..."
-    $BEDTOOLS genomecov -g "$CNVDIR"/chrom.sizes -i "$CNVDIR"/view/cds.bed -dz | cut -f1,2 > "$CNVDIR"/view/cds-perbase.bed
+    # echo "Getting CDS perbase location..."
+    # $BEDTOOLS genomecov -g "$CNVDIR"/chrom.sizes -i "$CNVDIR"/view/cds.bed -dz | cut -f1,2 > "$CNVDIR"/view/cds-perbase.bed
     
-    ##Obtaining cov files
-    ./get-coverage.sh -s 0:2 &
-    ./get-coverage.sh -s 2:4 &
-    ./get-coverage.sh -s 4:6 &
-    ./get-coverage.sh -s 6:8 &
-    ./get-coverage.sh -s 8:10 &
-    ./get-coverage.sh -s 10:12 &
-    ./get-coverage.sh -s 12:14 &
-    wait
+    # ##Obtaining cov files
+    # numsamples=$(bc <<< $SAMPLENUM/$maxthreads)
+    # number=0
+    # while [ $number -lt $(($SAMPLENUM-$numsamples)) ];do
+    #     nextid=$(($number+$numsamples))
+    #     echo "New batch: ${SAMPLES[$number]} to ${SAMPLES[$((nextid-1))]}"
+    #     ./get-coverage.sh -s $number:$nextid &
+    #     number=$nextid
+    # done
+    # echo "New batch: ${SAMPLES[$number]} to ${SAMPLES[$(($SAMPLENUM-1))]}"
+    # ./get-coverage.sh -s $number:$SAMPLENUM &
+    # wait
     
     ##Getting filtered CNVs
     mkdir -p "$CNVDIR"/summary

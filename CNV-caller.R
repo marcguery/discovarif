@@ -28,13 +28,18 @@ ratiocds.05 <- data.frame()
 
 for (f in coveragefiles){
     ####Summary per sample####
+    print(f)
     covname <- sub(incoveragepattern, outcovpattern, f)
     if (file.exists(paste(outdir, covname, sep="/"))){
         print(paste("Skipping", covname, "because file exists"))
         cov.cds <- read.table(paste(outdir, covname, sep="/"), h=F)[,c(2,3,4,7)]
     }else {
         samplefile <- read.table(paste(indir, f, sep="/"))
-        samplefile$V5 <- samplefile$V5/median(samplefile$V5)
+        samplemedian <- max(median(samplefile$V5), 1)
+        if (samplemedian <= 1){
+          print(paste("Very low coverage for sample", f, "Results are not reliable"))
+        }
+        samplefile$V5 <- samplefile$V5/samplemedian
         cov.cds <- data.frame(aggregate(samplefile$V5,by=list(samplefile$V1, samplefile$V2, samplefile$V3),
                                     function(x) {round(summary(x), 3)}))
         cov.cds <- cov.cds[with(cov.cds, order(Group.1, Group.2, Group.3)), ]
@@ -53,6 +58,7 @@ for (f in coveragefiles){
         ratiocds.05 <- merge(ratiocds.05, cov.cds)
     }
     ########
+    print(dim(ratiocds.05))
 
 }
 

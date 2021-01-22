@@ -3,7 +3,7 @@
 
 ##############################PARAMETERS##############################
 #I had to set those here cause bash would not allow to export array
-SAMPLES=($(ls -1 $READS | grep -o -E $SAMPEXP | uniq))
+SAMPLES=($(ls -1 $BAMBAIINDIR | grep -o -E $SAMPEXP | uniq))
 ##############################----------##############################
 
 ##############################OPTIONS##############################
