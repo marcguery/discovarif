@@ -64,10 +64,10 @@ for (f in coveragefiles){
 
 #####Best CNVs####
 score_from_cov <- function(cdsRow, control){
-  if (length(which(cdsRow >= 1.8))>=1 & cdsRow[control] < 1.5){
+  if (length(which(cdsRow >= 1.8))>=20 & cdsRow[control] < 1.5){
     multFac <- 1
   }
-  else if (length(which(cdsRow <= (0.2)))>=1 & cdsRow[control] > 0.5){
+  else if (length(which(cdsRow <= (0.05)))>=20 & cdsRow[control] > 0.5){
     multFac <- -1
   }
   else{
@@ -77,8 +77,14 @@ score_from_cov <- function(cdsRow, control){
   score <- multFac*min(100,max(cdsRow)/min(cdsRow))
   return(score)
 }
+if (all(colnames(ratiocds.05) != make.names(controlsample))){
+  print(colnames(ratiocds.05[,4:(length(coveragefiles)+3)]))
+  stop(paste0("The control sample \"", 
+  controlsample, 
+  "\" was not found in the dataset above, aborting..."))
+}
 controlnumber <- which(colnames(ratiocds.05) == make.names(controlsample))
-print(paste("The control sample is", controlsample, "(", controlnumber, ")"))
+print(paste0("The control sample is ", controlsample, " (", controlnumber, "th column)"))
 ratiocds.05$score <- apply(ratiocds.05[,4:(length(coveragefiles)+3)], 1,
                            FUN = score_from_cov, control=controlnumber-3)
 

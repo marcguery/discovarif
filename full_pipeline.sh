@@ -72,49 +72,59 @@ if [ $doSnp -eq 1 ];then
     #In renamed vcf files, sample names replace file paths
     $VARIF -vcf "$SNPDIR"/all-samples-renamed.vcf -gff "$GFF" -fasta "$GENOME" \
     --no-fixed --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.6 \
-    --ratio-no-alt 0.4 --csv "$SNPDIR"/filtered-SNPs-sINDELs.csv \
-    --filteredvcf "$SNPDIR"/filtered-SNPs-sINDELs.vcf
+    --ratio-no-alt 0.4 --csv "$SNPDIR"/alt06ref04/filtered-SNPs-sINDELs-0604.csv \
+    --filteredvcf "$SNPDIR"/alt06ref04/filtered-SNPs-sINDELs-0604.vcf
 
     $VARIF -vcf "$SNPDIR"/all-samples-Qual10-renamed.vcf -gff "$GFF" -fasta "$GENOME" \
     --no-fixed --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.6 \
-    --ratio-no-alt 0.4 --csv "$SNPDIR"/filtered-SNPs-sINDELs-Qual10.csv \
-    --filteredvcf "$SNPDIR"/filtered-SNPs-sINDELs-Qual10.vcf
+    --ratio-no-alt 0.4 --csv "$SNPDIR"/alt06ref04/filtered-SNPs-sINDELs-Qual10-0604.csv \
+    --filteredvcf "$SNPDIR"/alt06ref04/filtered-SNPs-sINDELs-Qual10-0604.vcf
+
+    $VARIF -vcf "$SNPDIR"/all-samples-renamed.vcf -gff "$GFF" -fasta "$GENOME" \
+    --no-fixed --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.55555 \
+    --ratio-no-alt 0.05 --csv "$SNPDIR"/alt05ref005/filtered-SNPs-sINDELs-05005.csv \
+    --filteredvcf "$SNPDIR"/alt06ref005/filtered-SNPs-sINDELs-05005.vcf
+
+    $VARIF -vcf "$SNPDIR"/all-samples-renamed.vcf -gff "$GFF" -fasta "$GENOME" \
+    --all-variants --all-regions --no-show --depth 6 --ratio-alt 0.8 \
+    --ratio-no-alt 0.02 --csv "$SNPDIR"/alt08ref002/filtered-SNPs-sINDELs-08002-all.csv \
+    --filteredvcf "$SNPDIR"/alt08ref002/filtered-SNPs-sINDELs-08002-all.vcf
     echo "Done the SNPs/INDELs step!"
 fi
 ########
 
 ####CNV####
 if [ $doCnv -eq 1 ];then
-    # ##Setup
-    # echo "Doing the CNVs step..."
-    # mkdir -p "$CNVDIR"/view
+    ##Setup
+    echo "Doing the CNVs step..."
+    mkdir -p "$CNVDIR"/view
 
-    # echo "###Background preparation###"
-    # echo "Getting chromosome sizes..."
-    # $SAMTOOLS faidx "$GENOME"
-    # cut -f1,2 "$GENOME".fai > "$CNVDIR"/chrom.sizes
-    # echo "Getting core genome..."
-    # grep "Core" "$INFOGENOME" | cut -f1-3 > "$CNVDIR"/view/3D7-core.bed
+    echo "###Background preparation###"
+    echo "Getting chromosome sizes..."
+    $SAMTOOLS faidx "$GENOME"
+    cut -f1,2 "$GENOME".fai > "$CNVDIR"/chrom.sizes
+    echo "Getting core genome..."
+    grep "Core" "$INFOGENOME" | cut -f1-3 > "$CNVDIR"/view/3D7-core.bed
 
-    # echo "Getting CDS coordinates..."
-    # grep CDS $GFF | cut -f1,4,5 | sort -V > "$CNVDIR"/view/cds.bed
-    # $BEDTOOLS intersect -a "$CNVDIR"/view/3D7-core.bed -b "$CNVDIR"/view/cds.bed > "$CNVDIR"/view/cds-core.bed
+    echo "Getting CDS coordinates..."
+    grep CDS $GFF | cut -f1,4,5 | sort -V > "$CNVDIR"/view/cds.bed
+    $BEDTOOLS intersect -a "$CNVDIR"/view/3D7-core.bed -b "$CNVDIR"/view/cds.bed > "$CNVDIR"/view/cds-core.bed
 
-    # echo "Getting CDS perbase location..."
-    # $BEDTOOLS genomecov -g "$CNVDIR"/chrom.sizes -i "$CNVDIR"/view/cds.bed -dz | cut -f1,2 > "$CNVDIR"/view/cds-perbase.bed
+    echo "Getting CDS perbase location..."
+    $BEDTOOLS genomecov -g "$CNVDIR"/chrom.sizes -i "$CNVDIR"/view/cds.bed -dz | cut -f1,2 > "$CNVDIR"/view/cds-perbase.bed
     
-    # ##Obtaining cov files
-    # numsamples=$(bc <<< $SAMPLENUM/$maxthreads)
-    # number=0
-    # while [ $number -lt $(($SAMPLENUM-$numsamples)) ];do
-    #     nextid=$(($number+$numsamples))
-    #     echo "New batch: ${SAMPLES[$number]} to ${SAMPLES[$((nextid-1))]}"
-    #     ./get-coverage.sh -s $number:$nextid &
-    #     number=$nextid
-    # done
-    # echo "New batch: ${SAMPLES[$number]} to ${SAMPLES[$(($SAMPLENUM-1))]}"
-    # ./get-coverage.sh -s $number:$SAMPLENUM &
-    # wait
+    ##Obtaining cov files
+    numsamples=$(bc <<< $SAMPLENUM/$maxthreads)
+    number=0
+    while [ $number -lt $(($SAMPLENUM-$numsamples)) ];do
+        nextid=$(($number+$numsamples))
+        echo "New batch: ${SAMPLES[$number]} to ${SAMPLES[$((nextid-1))]}"
+        ./get-coverage.sh -s $number:$nextid &
+        number=$nextid
+    done
+    echo "New batch: ${SAMPLES[$number]} to ${SAMPLES[$(($SAMPLENUM-1))]}"
+    ./get-coverage.sh -s $number:$SAMPLENUM &
+    wait
     
     ##Getting filtered CNVs
     mkdir -p "$CNVDIR"/summary
