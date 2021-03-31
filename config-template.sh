@@ -13,11 +13,11 @@ export INFOGENOME="$DATADIR"/Genome/TOBEFILLED
 export GFF="$DATADIR"/Genome/TOBEFILLED
 #FASTQ Read files
 export READS="$DATADIR"/reads/TOBEFILLED
-export SAMPLENUM=$(bc <<< $(($(ls -1 $READS | wc -l)/2)))
-echo "Found $SAMPLENUM samples"
 #Regular expression to differentiate samples
 export SAMPEXP='TOBEFILLED'
 SAMPLES=($(ls -1 $READS | grep -o -E $SAMPEXP | uniq))
+export SAMPLENUM=${#SAMPLES[@]}
+echo "Found $SAMPLENUM samples"
 export IDR1="TOBEFILLED"
 export IDR2="TOBEFILLED"
 export CONTROLNAME="TOBEFILLED"
@@ -59,5 +59,6 @@ export VARIF=TOBEFILLED
 export BEDTOOLS=TOBEFILLED
 export DELLY=TOBEFILLED
 export DELLYSAMPLES="$DATADIR"/dellysamples/TOBEFILLED
+export BEDGRAPHTOBIGWIG=TOBEFILLED
 
 ##############################-----##############################

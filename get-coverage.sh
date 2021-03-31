@@ -74,7 +74,7 @@ for ((i = $startSample ; i < $endSample ; i++ ));do
 
 	if [ ! -f "$CNVDIR"/view/"$samplename"-perbasecds.bw ];then
 		echo "Creating CDS perbase BW file..."
-		bedGraphToBigWig "$CNVDIR"/view/"$samplename"-perbasecds.bg "$CNVDIR"/chrom.sizes "$CNVDIR"/view/"$samplename"-perbasecds.bw
+		$BEDGRAPHTOBIGWIG "$CNVDIR"/view/"$samplename"-perbasecds.bg "$CNVDIR"/chrom.sizes "$CNVDIR"/view/"$samplename"-perbasecds.bw
 	fi
 	
 	if [ ! -f "$CNVDIR"/view/"$samplename"-perbaseinter.bg ];then
