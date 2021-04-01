@@ -3,8 +3,8 @@
 
 ##############################PARAMETERS##############################
 #I had to set those here cause bash would not allow to export array
-SAMPLES=($(ls -1 $READS | grep -o -E $SAMPEXP | uniq))
 PAIREDIDS=( $IDR1 $IDR2 )
+SAMPLES=($(ls -1 $READS | grep "${PAIREDIDS[0]}" | sort | grep -o -E $SAMPEXP ))
 ##############################----------##############################
 
 ##############################OPTIONS##############################
@@ -14,7 +14,7 @@ declare -i endSample=$SAMPLENUM
 declare -i doQual=0
 declare -i doMapp=0
 declare -i threads=1
-while getopts ":qmvhts:" o; do
+while getopts ":qmvht:s:" o; do
     case "${o}" in
         q) # Launch quality step.
             doQual=1
@@ -53,8 +53,8 @@ if [ $doQual -eq 1 ];then
     mkdir -p "$TRIMDIR"
 
     for ((i = $startSample ; i < $endSample ; i++ ));do
-        r1=$(grep "${SAMPLES[$i]}" <(ls -1 $READS) | grep "${PAIREDIDS[0]}")
-        r2=$(grep "${SAMPLES[$i]}" <(ls -1 $READS) | grep "${PAIREDIDS[1]}")
+        r1=$(ls -1 $READS | grep "${PAIREDIDS[0]}" | sort | head -n $(($i+1)) | tail -n 1 | grep "${SAMPLES[$i]}")
+        r2=$(ls -1 $READS | grep "${PAIREDIDS[1]}" | sort | head -n $(($i+1)) | tail -n 1 | grep "${SAMPLES[$i]}")
         [ -z "$r1" -o -z "$r2" ] && \
         { echo "Sample ${SAMPLES[$i]} does not match $READS"; continue; }
         r1name=$(cut -d"." -f1 <(basename "$r1"))
@@ -86,16 +86,16 @@ if [ $doMapp -eq 1 ];then
     
     for ((i = $startSample ; i < $endSample ; i++ ));do
         ##Mapping trimmed paired reads 1 & 2
-        r1=$(grep "${SAMPLES[$i]}" <(ls -1 $TRIMREADS) | grep "${PAIREDIDS[0]}")
-        r2=$(grep "${SAMPLES[$i]}" <(ls -1 $TRIMREADS) | grep "${PAIREDIDS[1]}")
+        r1=$(ls -1 $READS | grep "${PAIREDIDS[0]}" | sort | head -n $(($i+1)) | tail -n 1 | grep "${SAMPLES[$i]}")
+        r2=$(ls -1 $READS | grep "${PAIREDIDS[1]}" | sort | head -n $(($i+1)) | tail -n 1 | grep "${SAMPLES[$i]}")
         [ -z "$r1" -o -z "$r2" ] && \
         { echo "Sample ${SAMPLES[$i]} does not match $TRIMREADS"; continue; }
         samplename=$(cut -d"." -f1 <(basename "$r1") | sed -e 's/'${PAIREDIDS[0]}'//g')
-        
+
         echo "Processing sample ${SAMPLES[$i]}..."
         sam="$samplename".sam
-        $BWA index "$GENOME"
-        $BWA mem -t $threads "$GENOME" "$r1" "$r2" > "$SAMDIR/$sam"
+        $BWA mem -t $threads "$GENOME" "$r1" "$r2" | \
+        $SAMTOOLS addreplacerg -@ $(($threads-1)) -r "ID:${SAMPLES[$i]}" -r "SM:$samplename" - > "$SAMDIR/$sam"
 
         ##Converting SAM to BAM
         bam="$samplename".bam

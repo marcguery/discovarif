@@ -47,6 +47,8 @@ threadsamples=$(bc <<< $maxthreads/$maxthreadspersample)
 ####Quality and alignment with each sample####
 if [ $doQma -eq 1 ];then
     echo "Doing the Quality/mapping/variant step for each sample..."
+    $BWA index "$GENOME"
+
     start_index=0
     number_of_threads=7
     sequential_per_process=0
@@ -56,7 +58,7 @@ if [ $doQma -eq 1 ];then
         sequential_per_process=$(bc <<< $(($SAMPLENUM-$start_index))/$(($threadsamples-$iter)))
         end_index=$(($start_index+$sequential_per_process))
         echo "New batch: ${SAMPLES[$start_index]} to ${SAMPLES[$(($end_index-1))]}"
-        echo "./mapper-caller.sh -m -s $start_index:$end_index -t $maxthreadspersample"
+        ./mapper-caller.sh -m -s $start_index:$end_index -t $maxthreadspersample &
         start_index=$end_index
         ((iter++))
     done
