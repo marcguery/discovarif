@@ -27,7 +27,7 @@ while getopts ":mscot:u:h" o; do
         t) # Launch this number of processes in parallel
             maxthreads=$((OPTARG))
             ;;
-        u) # Launch this number of processes in parallel
+        u) # Launch this number of processes for each sample
             maxthreadspersample=$((OPTARG))
             ;;
         h | *) # Show help.
@@ -50,7 +50,6 @@ if [ $doQma -eq 1 ];then
     $BWA index "$GENOME"
 
     start_index=0
-    number_of_threads=7
     sequential_per_process=0
     iter=0
     echo ${SAMPLES[@]}
@@ -63,7 +62,7 @@ if [ $doQma -eq 1 ];then
         ((iter++))
     done
     wait
-    echo "Done the Quality/mapping/variant step for each sample!"
+    echo "Done the Mapping step for each sample!"
 fi
 ########
 
@@ -72,15 +71,28 @@ if [ $doSnp -eq 1 ];then
     echo "Doing the SNPs/INDELs step..."
     mkdir -p "$SNPDIR"
 
-    #Doing the mpileup with all the samples at once
-    $BCFTOOLS mpileup -f $GENOME $BAMFILES -Ou -d 99999 -a DP,AD,SP | \
-    $BCFTOOLS call --threads $(($maxthreads-1)) -m -v -Ob -o "$SNPDIR"/all-samples.bcf
+    $GATK CreateSequenceDictionary -R $GENOME
 
-    $BCFTOOLS view "$SNPDIR"/all-samples.bcf > "$SNPDIR"/all-samples.vcf
-    $BCFTOOLS view -i '%QUAL>=10' "$SNPDIR"/all-samples.bcf > "$SNPDIR"/all-samples-Qual10.vcf
+    start_index=0
+    sequential_per_process=0
+    iter=0
+    echo ${SAMPLES[@]}
+    while [ $start_index -le $(($SAMPLENUM-$sequential_per_process)) ];do
+        sequential_per_process=$(bc <<< $(($SAMPLENUM-$start_index))/$(($threadsamples-$iter)))
+        end_index=$(($start_index+$sequential_per_process))
+        echo "New batch: ${SAMPLES[$start_index]} to ${SAMPLES[$(($end_index-1))]}"
+        ./mapper-caller.sh -v -s $start_index:$end_index -t $maxthreadspersample &
+        start_index=$end_index
+        ((iter++))
+    done
+    wait
+    echo "Done the variant step for each sample!"
+
+    exit 0
 
     ##Filtering variants
     #In renamed vcf files, sample names replace file paths
+    mkdir -p "$SNPDIR"/alt06ref04
     $VARIF -vcf "$SNPDIR"/all-samples-renamed.vcf -gff "$GFF" -fasta "$GENOME" \
     --no-fixed --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.6 \
     --ratio-no-alt 0.4 --csv "$SNPDIR"/alt06ref04/filtered-SNPs-sINDELs-0604.csv \
@@ -91,15 +103,23 @@ if [ $doSnp -eq 1 ];then
     --ratio-no-alt 0.4 --csv "$SNPDIR"/alt06ref04/filtered-SNPs-sINDELs-Qual10-0604.csv \
     --filteredvcf "$SNPDIR"/alt06ref04/filtered-SNPs-sINDELs-Qual10-0604.vcf
 
+    mkdir -p "$SNPDIR"/alt05ref005
     $VARIF -vcf "$SNPDIR"/all-samples-renamed.vcf -gff "$GFF" -fasta "$GENOME" \
     --no-fixed --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.55555 \
     --ratio-no-alt 0.05 --csv "$SNPDIR"/alt05ref005/filtered-SNPs-sINDELs-05005.csv \
-    --filteredvcf "$SNPDIR"/alt06ref005/filtered-SNPs-sINDELs-05005.vcf
+    --filteredvcf "$SNPDIR"/alt05ref005/filtered-SNPs-sINDELs-05005.vcf
 
+    mkdir -p "$SNPDIR"/alt08ref002
     $VARIF -vcf "$SNPDIR"/all-samples-renamed.vcf -gff "$GFF" -fasta "$GENOME" \
-    --all-variants --all-regions --no-show --depth 6 --ratio-alt 0.8 \
-    --ratio-no-alt 0.02 --csv "$SNPDIR"/alt08ref002/filtered-SNPs-sINDELs-08002-all.csv \
-    --filteredvcf "$SNPDIR"/alt08ref002/filtered-SNPs-sINDELs-08002-all.vcf
+    --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.8 \
+    --ratio-no-alt 0.02 --csv "$SNPDIR"/alt08ref002/filtered-SNPs-sINDELs-08002-best.csv \
+    --filteredvcf "$SNPDIR"/alt08ref002/filtered-SNPs-sINDELs-08002-best.vcf
+
+    mkdir -p "$SNPDIR"/alt08ref02
+    $VARIF -vcf "$SNPDIR"/all-samples-renamed.vcf -gff "$GFF" -fasta "$GENOME" \
+    --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.8 \
+    --ratio-no-alt 0.2 --csv "$SNPDIR"/alt08ref02/filtered-SNPs-sINDELs-0802-best.csv \
+    --filteredvcf "$SNPDIR"/alt08ref02/filtered-SNPs-sINDELs-0802-best.vcf
     echo "Done the SNPs/INDELs step!"
 fi
 ########
@@ -126,7 +146,6 @@ if [ $doCnv -eq 1 ];then
     
     ##Obtaining cov files
     start_index=0
-    number_of_threads=7
     sequential_per_process=0
     iter=0
     echo ${SAMPLES[@]}

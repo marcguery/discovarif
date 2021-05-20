@@ -1,6 +1,6 @@
-#!/usr/local/R-3.6.0/bin/Rscript
+#!/usr/bin/env Rscript
 #Filter CNV variants (Thu  1 Oct 10:14:38 CEST 2020)
-
+if (as.integer(R.Version()$major) < 3) stop("Wrong version number, R 3 at least")
 ##############################LIBRARIES##############################
 
 library(reshape2)

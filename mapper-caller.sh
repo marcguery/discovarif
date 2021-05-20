@@ -4,7 +4,7 @@
 ##############################PARAMETERS##############################
 #I had to set those here cause bash would not allow to export array
 PAIREDIDS=( $IDR1 $IDR2 )
-SAMPLES=($(ls -1 $READS | grep "${PAIREDIDS[0]}" | sort | grep -o -E $SAMPEXP ))
+SAMPLES=( $(ls -1 $READS | grep "${PAIREDIDS[0]}" | sort | grep -o -E $SAMPEXP ) )
 ##############################----------##############################
 
 ##############################OPTIONS##############################
@@ -13,6 +13,7 @@ declare -i startSample=0
 declare -i endSample=$SAMPLENUM
 declare -i doQual=0
 declare -i doMapp=0
+declare -i doVari=0
 declare -i threads=1
 while getopts ":qmvht:s:" o; do
     case "${o}" in
@@ -21,6 +22,9 @@ while getopts ":qmvht:s:" o; do
             ;;
         m) # Launch mapping step.
             doMapp=1
+            ;;
+        v) # Launch variant calling step (SNP/INDELs)
+            doVari=1
             ;;
         s) # Indexes of the samples to process.
             startSample=$(cut -d":" -f1 <(echo "${OPTARG}"))
@@ -89,7 +93,7 @@ if [ $doMapp -eq 1 ];then
         r1=$(ls -1 $READS | grep "${PAIREDIDS[0]}" | sort | head -n $(($i+1)) | tail -n 1 | grep "${SAMPLES[$i]}")
         r2=$(ls -1 $READS | grep "${PAIREDIDS[1]}" | sort | head -n $(($i+1)) | tail -n 1 | grep "${SAMPLES[$i]}")
         [ -z "$r1" -o -z "$r2" ] && \
-        { echo "Sample ${SAMPLES[$i]} does not match $TRIMREADS"; continue; }
+        { echo "Sample ${SAMPLES[$i]} does not match $READS"; continue; }
         samplename=$(cut -d"." -f1 <(basename "$r1") | sed -e 's/'${PAIREDIDS[0]}'//g')
 
         echo "Processing sample ${SAMPLES[$i]}..."
@@ -105,9 +109,47 @@ if [ $doMapp -eq 1 ];then
         bamsorted="$samplename".sorted.bam
         $SAMTOOLS sort -@ $(($threads-1)) "$BAMBAIDIR/$bam" -o "$BAMBAIDIR/$bamsorted"
 
-        ##Indexing sorted BAM
-        $SAMTOOLS index -@ $(($threads-1)) "$BAMBAIDIR/$bamsorted"
+        ##Removing duplicates
+        bamdedupl="$samplename".dd.sorted.bam
+        mkdir -p "$BAMBAIDIR/metrics"
+        $PICARD MarkDuplicates I="$BAMBAIDIR/$bamsorted" \
+            O="$BAMBAIDIR/$bamdedupl" \
+            M="$BAMBAIDIR/metrics/$samplename.dd.stats" \
+            REMOVE_DUPLICATES=true
+
+        ##Indexing sorted deduplicated BAM
+        $SAMTOOLS index -@ $(($threads-1)) "$BAMBAIDIR/$bamdedupl"
+
+        [ $? -eq 0 ] && rm "$BAMBAIDIR/$bamsorted"
     done
+fi
+
+if [ $doVari -eq 1 ];then
+    #In process of integration
+    for ((i = $startSample ; i < $endSample ; i++ ));do
+        ##Mapping trimmed paired reads 1 & 2
+        sample=$(ls -1 $BAMFILES | sort | head -n $(($i+1)) | tail -n 1 | grep "${SAMPLES[$i]}")
+        [ -z "$sample" ] && \
+        { echo "Sample ${SAMPLES[$i]} does not match $BAMFILES"; continue; }
+        samplename=$(cut -d"." -f1 <(basename "$sample") | sed -e 's/'${PAIREDIDS[0]}'//g')
+        
+        bamdedupl="$samplename".dd.sorted.bam
+        vcf="$samplename".vcf
+
+        echo "$BAMBAIDIR/$bamdedupl"
+
+        continue
+
+        $GATK HaplotypeCaller \
+            -R $GENOME \
+            -I "$BAMBAIDIR/$bamdedupl" \
+            -emit-ref-confidence GVCF \
+            --pcr-indel-model NONE \
+            --sample-ploidy 1 \
+            --max-alternate-alleles 2 \
+            --output "$SNPDIR/$vcf"
+    done
+
 fi
 
 ##############################--------##############################

@@ -41,7 +41,7 @@ shift $((OPTIND-1))
 #####################################################################
 
 ##############################PARAMETERS##############################
-VARIANTS=("DEL" "DUP" "INV" "TRA" "INS")
+VARIANTS=("DEL" "DUP" "INS" "INV" "BND")
 export OMP_NUM_THREADS=$maxthreads
 CTRL=( $controls )
 TUMOR=( $samples )
@@ -57,10 +57,12 @@ if [ ! -f "$DELLYDIR"/delly-final.vcf ];then
     for variant in ${VARIANTS[@]};do
         echo "Doing $variant call..."
         $DELLY call -t $variant -g "$GENOME" "${TUMOR[@]}" "${CTRL[@]}" \
-        -o "$DELLYDIR"/delly-$variant.bcf && \
-        $DELLY filter -t $variant -p -f somatic -m $minsize -a $altaf -r $ratiogeno -v $coverage -c $controlcontamination \
+        -o "$DELLYDIR"/delly-$variant.bcf
+        echo "Doing variant filtering..."
+        $DELLY filter -p -f somatic -m $minsize -a $altaf -r $ratiogeno -v $coverage -c $controlcontamination \
         "$DELLYDIR"/delly-$variant.bcf -s $DELLYSAMPLES \
         -o "$DELLYDIR"/delly-$variant-filter.bcf
+        [ ! -f "$DELLYDIR"/delly-$variant-filter.bcf ] && touch "$DELLYDIR"/delly-$variant-filter.bcf
     done
 
     echo "Merging files..."

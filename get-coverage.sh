@@ -3,7 +3,7 @@
 
 ##############################PARAMETERS##############################
 #I had to set those here cause bash would not allow to export array
-SAMPLES=($(ls -1 $BAMBAIINDIR | grep -o -E $SAMPEXP | uniq))
+SAMPLES=($(ls -1 $BAMFILES | grep -o -E $SAMPEXP | uniq))
 ##############################----------##############################
 
 ##############################OPTIONS##############################
@@ -52,9 +52,19 @@ for ((i = $startSample ; i < $endSample ; i++ ));do
 		$BEDTOOLS coverage -a "$CNVDIR"/view/cds-core.bed -b "$bamsorted" -d > "$CNVDIR/$samplename"-perbasecds-core.coverage
 	fi
 	
-	if [ ! -f "$CNVDIR"/view/"$samplename"-perbase.bed -a ! -f "$CNVDIR"/view/"$samplename"-perbasecds.bed -a ! -f "$CNVDIR"/view/"$samplename"-perbaseinter.bed ];then
+	if [ ! -f "$CNVDIR"/view/"$samplename"-perbase.bed -a ! -f "$CNVDIR"/view/"$samplename"-perbase.bg ];then
 		echo "Creating whole perbase file..."
 		$BEDTOOLS genomecov -ibam "$bamsorted" -g "$CNVDIR"/chrom.sizes -d > "$CNVDIR"/view/"$samplename"-perbase.bed
+	fi
+
+	if [ ! -f "$CNVDIR"/view/"$samplename"-perbase.bg ];then
+		echo "Creating whole perbase BG file..."
+		awk '{start=$2-1} { printf("%s\t%s\t%i\t%s\n",$1,start,$2,$3); }' "$CNVDIR"/view/"$samplename"-perbase.bed > "$CNVDIR"/view/"$samplename"-perbase.bg
+	fi
+
+	if [ ! -f "$CNVDIR"/view/"$samplename"-perbase.bw ];then
+		echo "Creating whole perbase BW file..."
+		$BEDGRAPHTOBIGWIG "$CNVDIR"/view/"$samplename"-perbase.bg "$CNVDIR"/chrom.sizes "$CNVDIR"/view/"$samplename"-perbase.bw
 	fi
 
 	if [ ! -f "$CNVDIR"/view/"$samplename"-perbasecds.bed ];then
@@ -69,7 +79,7 @@ for ((i = $startSample ; i < $endSample ; i++ ));do
 
 	if [ ! -f "$CNVDIR"/view/"$samplename"-perbasecds.bg ];then
 		echo "Creating CDS perbase BG file..."
-		awk '{sum=$2+1} { printf("%s\t%s\t%i\t%s\n",$1,$2,sum,$3); }' "$CNVDIR"/view/"$samplename"-perbasecds.bed > "$CNVDIR"/view/"$samplename"-perbasecds.bg
+		awk '{start=$2-1} { printf("%s\t%s\t%i\t%s\n",$1,start,$2,$3); }' "$CNVDIR"/view/"$samplename"-perbasecds.bed > "$CNVDIR"/view/"$samplename"-perbasecds.bg
 	fi
 
 	if [ ! -f "$CNVDIR"/view/"$samplename"-perbasecds.bw ];then
@@ -79,7 +89,7 @@ for ((i = $startSample ; i < $endSample ; i++ ));do
 	
 	if [ ! -f "$CNVDIR"/view/"$samplename"-perbaseinter.bg ];then
 		echo "Creating intergenic perbase BG file..."
-		awk '{sum=$2+1} { printf("%s\t%s\t%i\t%s\n",$1,$2,sum,$3); }' "$CNVDIR"/view/"$samplename"-perbaseinter.bed > "$CNVDIR"/view/"$samplename"-perbaseinter.bg
+		awk '{start=$2-1} { printf("%s\t%s\t%i\t%s\n",$1,start,$2,$3); }' "$CNVDIR"/view/"$samplename"-perbaseinter.bed > "$CNVDIR"/view/"$samplename"-perbaseinter.bg
 	fi
 	
 	if [ -f "$CNVDIR"/view/"$samplename"-perbase.bed -a -f "$CNVDIR"/view/"$samplename"-perbasecds.bed -a -f "$CNVDIR"/view/"$samplename"-perbaseinter.bed ];then
