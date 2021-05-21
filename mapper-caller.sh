@@ -134,20 +134,15 @@ if [ $doVari -eq 1 ];then
         samplename=$(cut -d"." -f1 <(basename "$sample") | sed -e 's/'${PAIREDIDS[0]}'//g')
         
         bamdedupl="$samplename".dd.sorted.bam
-        vcf="$samplename".vcf
-
-        echo "$BAMBAIDIR/$bamdedupl"
-
-        continue
-
+        vcf="$samplename".vcf.gz
+        
         $GATK HaplotypeCaller \
             -R $GENOME \
             -I "$BAMBAIDIR/$bamdedupl" \
-            -emit-ref-confidence GVCF \
+            -O "$SNPDIR/$vcf" \
             --pcr-indel-model NONE \
-            --sample-ploidy 1 \
-            --max-alternate-alleles 2 \
-            --output "$SNPDIR/$vcf"
+            -ERC GVCF \
+            --sample-ploidy 1
     done
 
 fi

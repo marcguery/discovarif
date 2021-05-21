@@ -88,6 +88,23 @@ if [ $doSnp -eq 1 ];then
     wait
     echo "Done the variant step for each sample!"
 
+    $GATK CombineGVCFs \
+        -R $GENOME \
+        --variant $(sed -e 's/ / --variant /g' <(echo $SNPDIR/*.vcf.gz)) \
+        -O $SNPDIR/cohort.g.vcf.gz
+
+    $GATK --java-options "-Xmx4g" GenotypeGVCFs \
+        -R $GENOME \
+        -V $SNPDIR/cohort.g.vcf.gz \
+        -O $SNPDIR/output.vcf.gz
+
+    
+    mkdir -p "$SNPDIR"/alt08ref02
+    $VARIF -vcf <(gunzip -c $SNPDIR/output.vcf.gz) -gff "$GFF" -fasta "$GENOME" \
+    --no-fixed --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.8 \
+    --ratio-no-alt 0.2 --csv "$SNPDIR"/alt08ref02/filtered-SNPs-sINDELs-0802.csv \
+    --filteredvcf "$SNPDIR"/alt08ref02/filtered-SNPs-sINDELs-0802.vcf
+
     exit 0
 
     ##Filtering variants

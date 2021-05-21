@@ -82,7 +82,7 @@ This step is launched with the script `mapper-caller.sh` which can optionally ru
 - [Mapping](#mappmapp) (*-m*)
 - [Variant calling](#mappvari) (*-v*)
 
-By default, `mapper-caller.sh` will run the steps on all samples found in the reads directory, but you can subset samples by their index order using *-s*. This is useful especially when you need to parallelize the processes.
+By default, `mapper-caller.sh` will run the steps on all samples found in the reads directory, but you can subset samples by their index order using *-s*. This is useful especially when you need to parallelize the processes. 
 
 ### <a name="mapptrim"></a>Trimming
 
@@ -92,23 +92,23 @@ Additionally, the quality of raw and trimmed reads will be analysed using [FastQ
 
 ### <a name="mappmapp"></a>Mapping
 
-The trimmed paired reads will be mapped on the reference Genome (tested with *Plasmodium falciparum* 3D7 v 46 genome) with [bwa](http://bio-bwa.sourceforge.net/bwa.shtml) (tested with bwa v 0.7.17). The output will then be processed by [samtools](http://www.htslib.org/doc/samtools.html) (tested with samtools v 1.10) in order to finally obtain sorted BAM files.
+The trimmed paired reads will be mapped on the reference Genome (tested with *Plasmodium falciparum* 3D7 v 46 genome) with [bwa](http://bio-bwa.sourceforge.net/bwa.shtml) (tested with bwa v 0.7.17). The output will then be processed by [samtools](http://www.htslib.org/doc/samtools.html) (tested with samtools v 1.10) in order to obtain sorted BAM files. Finally, duplicated reads are removed using [picard](https://broadinstitute.github.io/picard/) (tested with picard v 2.18.25).
 
 ### <a name="mappvari"></a>Variant calling (each sample)
 
-This phase has never been properly tested so it might be prone to some bugs. For each sample, [bcftools](http://samtools.github.io/bcftools/bcftools.html) will run a mpileup by reading at most 99999 reads at a position and will output a VCF file containing the DP, AD and SP fields. A variant call would then be performed using the multi-allelic model instead of the default one. Finally, only variants whose QUAL fiield is superior to 10 will be kept.
+This option uses [GATK](https://gatk.broadinstitute.org/hc/en-us) HaplotypeCaller (tested with GATK v 4.2.0) on sorted reads with the duplicates removed to obtain a GVCF file for each sample. The ploidy used by the model must be properly set and is by default equal to 1. **This step is not launched using discovarif `-m`  option**.
 
 ## Variant filtering
 
 ### <a name="varisnps"></a>SNPs/small INDELs
 
-At first, bcftools (tested with bcftools v 2.26.0) will run a mpileup by reading at most 99999 reads at a position for all samples and will output a VCF file containing the DP, AD and SP fields. A variant call will then be performed using the multi-allelic model instead of the default one. Finally, only variants whose QUAL fiield is superior to 10 will be kept.
+After the [variant calling](#mappvari)  for each sample has finished, GATK CombineGVCFs will be used to merge all the GVCF and the final variants will be extracted using GATK GenotypeGVCFs.
 
 Then [varif](https://github.com/marcguery/varif) will be used to filter variants based on read depths and ALT allele frequency. A variant is considered available in a sample only if the total read depth is above 5. The ALT allele frequency of the available samples must comprise a value of at least 0.8 in one sample and a value of at most 0.2 in any other sample.
 
 ### <a name="varicnvs"></a>CNVs
 
-After restricting the analysis on the locations of the core genome (3D7 core genome annotations provided by *[Miles A, Iqbal Z, Vauterin P, et al. Indels, structural variation, and  recombination drive genomic diversity in Plasmodium falciparum. Genome Res. 2016;26(9):1288-1299. doi:10.1101/gr.203711.115](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5052046/)*), a file containing the per base coverage in CDS regions (as annotated on the GFF file) is created for each sample using [bedtools](https://bedtools.readthedocs.io/en/latest/content/bedtools-suite.html) (tested with bedtools v 2.26.0).
+After restricting the analysis on the locations of the core genome (3D7 core genome annotations provided by *[Miles A, Iqbal Z, Vauterin P, et al. Indels, structural variation, and  recombination drive genomic diversity in Plasmodium falciparum. Genome Res. 2016;26(9):1288-1299. doi:10.1101/gr.203711.115](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5052046/)*), a file containing the per base coverage in CDS regions (as annotated on the GFF file) is created for each sample using [bedtools](https://bedtools.readthedocs.io/en/latest/content/bedtools-suite.html) (tested with bedtools v 2.27.1).
 
 Alternatively, per base coverage is generated in BED and BEDGRAPH format in order to visualise CNVs on a genome browser.
 
@@ -118,22 +118,23 @@ If the median coverage of this CDS is of 1.8 or more in at least one sample and 
 
 ### <a name="varioths"></a>Other variants
 
-To find other variants such as big INDELs, duplication, translocation and inversion, [DELLY](https://github.com/dellytools/delly) (tested with DELLY v 0.7.5) somatic model will be used. Variants of all sizes will be kept if one sample has an ALT allele frequency  of 0.5 or more while the control sample has an ALT allele frequency of 0.5 at most if the read depth is at 5 or more reads.
+To find other variants such as big INDELs, duplication, translocation and inversion, [DELLY](https://github.com/dellytools/delly) (tested with DELLY v 0.8.7) somatic model will be used. Variants of all sizes will be kept if one sample has an ALT allele frequency  of 0.5 or more while the control sample has an ALT allele frequency of 0.5 at most if the read depth is at 5 or more reads.
 
 ## Setup
 
-We tested this pipeline using the inut described below:
+We tested this pipeline using the programs/inputs described below:
 
 | Name                                                         | Version                                                      | Usage                       |
 | ------------------------------------------------------------ | ------------------------------------------------------------ | --------------------------- |
 | [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) | 0.10.1                                                       | Viewing quality of reads    |
 | [trimmomatic](http://www.usadellab.org/cms/?page=trimmomatic) | 0.39                                                         | Trimming reads              |
 | [bwa](http://bio-bwa.sourceforge.net/bwa.shtml)              | 0.7.17                                                       | Mapping reads               |
+| [picard](https://broadinstitute.github.io/picard/)           | 2.18.25                                                      | Removing duplicated reads   |
 | [samtools](http://www.htslib.org/doc/samtools.html)          | 1.10                                                         | Produce BAM files           |
-| [bcftools](http://samtools.github.io/bcftools/bcftools.html) | 1.10.2                                                       | Getting SNPs/small INDELs   |
-| [varif](https://github.com/marcguery/varif)                  |                                                              | Filtering SNPs/small INDELs |
-| [bedtools](https://bedtools.readthedocs.io/en/latest/content/bedtools-suite.html) | 2.26.0                                                       | Filtering CNVs              |
-| [DELLY](https://github.com/dellytools/delly)                 | 0.7.5                                                        | Filtering other variants    |
+| [GATK](https://gatk.broadinstitute.org/hc/en-us)             | 4.2.0                                                        | Getting SNPs/small INDELs   |
+| [varif](https://github.com/marcguery/varif)                  | 0.0.4                                                        | Filtering SNPs/small INDELs |
+| [bedtools](https://bedtools.readthedocs.io/en/latest/content/bedtools-suite.html) | 2.27.1                                                       | Filtering CNVs              |
+| [DELLY](https://github.com/dellytools/delly)                 | 0.8.7                                                        | Filtering other variants    |
 | 3D7 genome                                                   | 46                                                           | Reference genome            |
 | Core annotation                                              | [2016](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5052046/) | Subseting CNVs              |
 | Resistant samples                                            |                                                              | Variant discovery           |
