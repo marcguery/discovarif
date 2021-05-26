@@ -97,7 +97,6 @@ if [ $doSnp -eq 1 ];then
         -R $GENOME \
         -V $SNPDIR/cohort.g.vcf.gz \
         -O $SNPDIR/output.vcf.gz
-
     
     mkdir -p "$SNPDIR"/alt08ref02
     $VARIF -vcf <(gunzip -c $SNPDIR/output.vcf.gz) -gff "$GFF" -fasta "$GENOME" \
@@ -105,35 +104,28 @@ if [ $doSnp -eq 1 ];then
     --ratio-no-alt 0.2 --csv "$SNPDIR"/alt08ref02/filtered-SNPs-sINDELs-0802.csv \
     --filteredvcf "$SNPDIR"/alt08ref02/filtered-SNPs-sINDELs-0802.vcf
 
-    exit 0
-
     ##Filtering variants
     #In renamed vcf files, sample names replace file paths
     mkdir -p "$SNPDIR"/alt06ref04
-    $VARIF -vcf "$SNPDIR"/all-samples-renamed.vcf -gff "$GFF" -fasta "$GENOME" \
+    $VARIF -vcf <(gunzip -c "$SNPDIR"/output.vcf.gz) -gff "$GFF" -fasta "$GENOME" \
     --no-fixed --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.6 \
     --ratio-no-alt 0.4 --csv "$SNPDIR"/alt06ref04/filtered-SNPs-sINDELs-0604.csv \
     --filteredvcf "$SNPDIR"/alt06ref04/filtered-SNPs-sINDELs-0604.vcf
 
-    $VARIF -vcf "$SNPDIR"/all-samples-Qual10-renamed.vcf -gff "$GFF" -fasta "$GENOME" \
-    --no-fixed --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.6 \
-    --ratio-no-alt 0.4 --csv "$SNPDIR"/alt06ref04/filtered-SNPs-sINDELs-Qual10-0604.csv \
-    --filteredvcf "$SNPDIR"/alt06ref04/filtered-SNPs-sINDELs-Qual10-0604.vcf
-
     mkdir -p "$SNPDIR"/alt05ref005
-    $VARIF -vcf "$SNPDIR"/all-samples-renamed.vcf -gff "$GFF" -fasta "$GENOME" \
+    $VARIF -vcf <(gunzip -c "$SNPDIR"/output.vcf.gz) -gff "$GFF" -fasta "$GENOME" \
     --no-fixed --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.55555 \
     --ratio-no-alt 0.05 --csv "$SNPDIR"/alt05ref005/filtered-SNPs-sINDELs-05005.csv \
     --filteredvcf "$SNPDIR"/alt05ref005/filtered-SNPs-sINDELs-05005.vcf
 
     mkdir -p "$SNPDIR"/alt08ref002
-    $VARIF -vcf "$SNPDIR"/all-samples-renamed.vcf -gff "$GFF" -fasta "$GENOME" \
+    $VARIF -vcf <(gunzip -c "$SNPDIR"/output.vcf.gz) -gff "$GFF" -fasta "$GENOME" \
     --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.8 \
     --ratio-no-alt 0.02 --csv "$SNPDIR"/alt08ref002/filtered-SNPs-sINDELs-08002-best.csv \
     --filteredvcf "$SNPDIR"/alt08ref002/filtered-SNPs-sINDELs-08002-best.vcf
 
     mkdir -p "$SNPDIR"/alt08ref02
-    $VARIF -vcf "$SNPDIR"/all-samples-renamed.vcf -gff "$GFF" -fasta "$GENOME" \
+    $VARIF -vcf <(gunzip -c "$SNPDIR"/output.vcf.gz) -gff "$GFF" -fasta "$GENOME" \
     --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.8 \
     --ratio-no-alt 0.2 --csv "$SNPDIR"/alt08ref02/filtered-SNPs-sINDELs-0802-best.csv \
     --filteredvcf "$SNPDIR"/alt08ref02/filtered-SNPs-sINDELs-0802-best.vcf
@@ -188,7 +180,8 @@ fi
 if [ $doOth -eq 1 ];then
     echo "Doing the Other variants step..."
     mkdir -p "$DELLYDIR"
-    ./DELLY-caller.sh -s "$(ls -1 $BAMFILES | grep -v -E $CONTROLNAME)" -c "$(ls -1 $BAMFILES | grep -E $CONTROLNAME)"
+    ./DELLY-caller.sh -v $maxthreads \
+        -s "$(ls -1 $BAMFILES | grep -v -E $CONTROLNAME)" -c "$(ls -1 $BAMFILES | grep -E $CONTROLNAME)"
     echo "Done the Other variants step!"
 fi
 ########

@@ -30,7 +30,7 @@ while getopts ":s:c:t:m:a:r:v:d" o; do
             ratiogeno=$OPTARG
             ;;
         v) # Number of threads delly will use
-            coverage=$((OPTARG))
+            maxthreads=$((OPTARG))
             ;;
         d) # Number of threads delly will use
             controlcontamination=$OPTARG
@@ -49,6 +49,7 @@ TUMOR=( $samples )
 
 ##############################PIPELINE##############################
 
+echo "Running DELLY with $OMP_NUM_THREADS"
 echo "Set ${CTRL[@]} as controls"
 echo "Dealing with ${TUMOR[@]}..."
 
