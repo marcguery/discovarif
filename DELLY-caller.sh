@@ -96,6 +96,5 @@ done
     for f in $(ls -1 "$DELLYDIR"/*-filter.bcf);do
         $BCFTOOLS view "$f" | grep -v "#" >> "$DELLYDIR"/delly-final.vcf
     done
-fi
 
 ##############################--------##############################
