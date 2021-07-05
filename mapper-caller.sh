@@ -134,15 +134,17 @@ if [ $doVari -eq 1 ];then
         samplename=$(cut -d"." -f1 <(basename "$sample") | sed -e 's/'${PAIREDIDS[0]}'//g')
         
         bamdedupl="$samplename".dd.sorted.bam
-        vcf="$samplename".vcf.gz
+        gatkbam="$samplename".gatk.bam
+        gvcf="$samplename".g.vcf.gz
         
         $GATK HaplotypeCaller \
             -R $GENOME \
             -I "$BAMBAIDIR/$bamdedupl" \
-            -O "$SNPDIR/$vcf" \
+            -O "$TMPGVCF/$gvcf" \
             --pcr-indel-model NONE \
             -ERC GVCF \
-            --sample-ploidy 1
+            --sample-ploidy $(($PLOIDY)) \
+            -bamout "$BAMBAIDIR/$gatkbam"
     done
 
 fi

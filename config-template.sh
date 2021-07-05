@@ -9,6 +9,7 @@
 export DATADIR=TOBEFILLED #Absolute path to the input folder
 #Fasta file
 export GENOME="$DATADIR"/Genome/TOBEFILLED #Absolute path to fasta reference genome file
+export PLOIDY=1 #Ploidy of the genome
 export INFOGENOME="$DATADIR"/Genome/TOBEFILLED #Absolute path to tabulated file with core annotations of the genome 
                                                #(see Miles 2016 for Plasmodium: 10.1101/gr.203711.115)
 export GFF="$DATADIR"/Genome/TOBEFILLED #Absolute path to gff features file
