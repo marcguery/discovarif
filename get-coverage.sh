@@ -3,7 +3,7 @@
 
 ##############################PARAMETERS##############################
 #I had to set those here cause bash would not allow to export array
-SAMPLES=($(ls -1 $BAMFILES | grep -o -E $SAMPEXP | uniq))
+SAMPLES=($(ls -1 $BAMFILES | sort | grep -o -E $SAMPEXP | uniq))
 ##############################----------##############################
 
 ##############################OPTIONS##############################
@@ -24,7 +24,7 @@ done
 shift $((OPTIND-1))
 [ $startSample -ge $endSample -o $endSample -gt $SAMPLENUM ] \
 && { 
-    echo "The indices provided do not match the $SAMPLENUM samples detected in $READS";
+    echo "The indices provided do not match the $SAMPLENUM samples detected in $BAMFILES";
     echo "Indices should be between 0 and $SAMPLENUM, \
 like 0:$SAMPLENUM or 1:$(($SAMPLENUM-1))";
     exit 1; }
@@ -34,7 +34,7 @@ echo "Coverage with sample indices $startSample to $endSample"
 
 ##############################PIPELINE##############################
 for ((i = $startSample ; i < $endSample ; i++ ));do
-    bamsorted=$(grep "${SAMPLES[$i]}" <(ls -1 $BAMFILES))
+    bamsorted=$(ls -1 $BAMFILES | sort | head -n $(($i+1)) | tail -n 1 | grep "${SAMPLES[$i]}")
 	[ -z "$bamsorted" ] && \
     { echo "Sample ${SAMPLES[$i]} does not match $BAMFILES"; continue; }
     samplename=$(cut -d"." -f1 <(basename "$bamsorted"))

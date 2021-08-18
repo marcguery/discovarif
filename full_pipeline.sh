@@ -101,10 +101,17 @@ if [ $doSnp -eq 1 ];then
         -V $SNPDIR/cohort.g.vcf.gz \
         -O $SNPDIR/variants.vcf.gz
 
-    ./VCF-score-filter.R "$SNPDIR"/variants.vcf.gz "0.75" "$SNPDIR"/variants-filtered-075.vcf
+    goodsamples=($(cut -f1 "$DELLYSAMPLES"))
+    allsamples=($(grep -m 1 "#CHROM" <(gunzip -c "$SNPDIR"/variants.vcf.gz)))
+
+    indices=($(for sample in ${goodsamples[@]}; do i=0; while [ ! "$sample" == "${allsamples[$i]}" ]; do ((i++)); done; echo $((i+1)); done))
+        
+    cut -f 1-9,$(echo ${indices[@]} | sed 's/ /,/g') <(gunzip -c "$SNPDIR"/variants.vcf.gz) | gzip -c > "$SNPDIR"/variants-filtered.vcf.gz
+
+    # ./VCF-score-filter.R "$SNPDIR"/variants-filtered.vcf.gz "0.75" "$SNPDIR"/variants-filtered-075.vcf
     
     mkdir -p "$SNPDIR"/alt08ref02
-    $VARIF -vcf "$SNPDIR"/variants-filtered-075.vcf -gff "$GFF" -fasta "$GENOME" \
+    $VARIF -vcf <(gunzip -c "$SNPDIR"/variants-filtered.vcf.gz) -gff "$GFF" -fasta "$GENOME" \
     --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.8 \
     --ratio-no-alt 0.2 --csv "$SNPDIR"/alt08ref02/filtered-SNPs-sINDELs-0802.csv \
     --filteredvcf "$SNPDIR"/alt08ref02/filtered-SNPs-sINDELs-0802.vcf
@@ -112,19 +119,19 @@ if [ $doSnp -eq 1 ];then
     ##Filtering variants
     #In renamed vcf files, sample names replace file paths
     mkdir -p "$SNPDIR"/alt06ref04
-    $VARIF -vcf "$SNPDIR"/variants-filtered-075.vcf -gff "$GFF" -fasta "$GENOME" \
+    $VARIF -vcf <(gunzip -c "$SNPDIR"/variants-filtered.vcf.gz) -gff "$GFF" -fasta "$GENOME" \
     --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.6 \
     --ratio-no-alt 0.4 --csv "$SNPDIR"/alt06ref04/filtered-SNPs-sINDELs-0604.csv \
     --filteredvcf "$SNPDIR"/alt06ref04/filtered-SNPs-sINDELs-0604.vcf
 
     mkdir -p "$SNPDIR"/alt05ref005
-    $VARIF -vcf "$SNPDIR"/variants-filtered-075.vcf -gff "$GFF" -fasta "$GENOME" \
+    $VARIF -vcf <(gunzip -c "$SNPDIR"/variants-filtered.vcf.gz) -gff "$GFF" -fasta "$GENOME" \
     --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.55555 \
     --ratio-no-alt 0.05 --csv "$SNPDIR"/alt05ref005/filtered-SNPs-sINDELs-05005.csv \
     --filteredvcf "$SNPDIR"/alt05ref005/filtered-SNPs-sINDELs-05005.vcf
 
     mkdir -p "$SNPDIR"/alt08ref002
-    $VARIF -vcf "$SNPDIR"/variants-filtered-075.vcf -gff "$GFF" -fasta "$GENOME" \
+    $VARIF -vcf <(gunzip -c "$SNPDIR"/variants-filtered.vcf.gz) -gff "$GFF" -fasta "$GENOME" \
     --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.8 \
     --ratio-no-alt 0.02 --csv "$SNPDIR"/alt08ref002/filtered-SNPs-sINDELs-08002-best.csv \
     --filteredvcf "$SNPDIR"/alt08ref002/filtered-SNPs-sINDELs-08002-best.vcf
