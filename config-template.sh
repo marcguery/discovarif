@@ -7,6 +7,11 @@
 ##RAWDATA##
 #Path for all rawdata
 export DATADIR=TOBEFILLED #Absolute path to the input folder
+REMOTEDATADIR= #Absolute path to a remote data directory. 
+                                # Requires a SSH key between the local and remote machines.
+                                # Fill this variable if your files are located on a server.
+REMOTEADDRESS= # Address of the remote machine hosting the files.
+                        # Fill this variable if your files are located on a server.
 #Fasta file
 export GENOME="$DATADIR"/Genome/TOBEFILLED #Absolute path to fasta reference genome file
 export PLOIDY=1 #Ploidy of the genome
@@ -34,10 +39,15 @@ export CONTROLNAME="TOBEFILLED" #Name of the control sample used for the CNV dis
 ##OUTPUT##
 #Path for all output
 export OUTDIR=TOBEFILLED #Absolute path to the output folder
+
+REMOTEOUTDIR= #Absolute path to a remote output directory. 
+                                # Requires a SSH key between the local and remote machines
+                                # Fill this variable if your files are located on a server.
+
 #Quality files
 export QUALDIR="$OUTDIR"/fastqc
 export TRIMDIR="$OUTDIR"/trim
-#Trimmed failes
+#Trimmed files
 export TRIMREADS="$TRIMDIR"/*.paired.gz
 #SAM files
 export SAMDIR="$OUTDIR"/sam
@@ -55,7 +65,28 @@ export DELLYDIR="$VARIANTDIR"/Others
 
 ##############################----------##############################
 
+##############################SERVER##############################
+#This script will copy your files from a distant server to your current session
+# if they are missing from your current session and if you provided a remote address
+
+if [ ! -z $REMOTEADDRESS ];then
+    echo "Copying missing files in $DATADIR from $REMOTEADDRESS:$REMOTEDATADIR"
+    mkdir -p "$DATADIR"
+    ssh "$REMOTEADDRESS" [ -d "$REMOTEDATADIR" ] || \
+        { echo "$REMOTEDATADIR does not exist in $REMOTEADDRESS"; exit 1; }
+    rsync -a --ignore-existing --progress "$REMOTEADDRESS":"$REMOTEDATADIR"/ "$DATADIR"/
+
+    echo "Copying missing files in $OUTDIR from $REMOTEADDRESS:$REMOTEOUTDIR"
+    mkdir -p "$OUTDIR"
+    ssh "$REMOTEADDRESS" [ -d "$REMOTEOUTDIR" ] || \
+        { echo "$REMOTEOUTDIR does not exist in $REMOTEADDRESS"; exit 1; }
+    rsync -a --ignore-existing --progress "$REMOTEADDRESS":"$REMOTEOUTDIR"/ "$OUTDIR"/
+fi
+
+##############################----------##############################
+
 ##############################UTILS##############################
+# Provide the path to all executables and config files
 
 export FASTQC=fastqc
 export TRIMMOMATIC=TrimmomaticPE

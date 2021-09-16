@@ -3,7 +3,9 @@
 
 ##############################PARAMETERS##############################
 #I had to set those here cause bash would not allow to export array
-SAMPLES=($(ls -1 $BAMFILES | sort | grep -o -E $SAMPEXP | uniq))
+SAMPLES=($(ls -1 $READS | sort | grep -o -E $SAMPEXP | uniq))
+BAMSAMPLES=($(ls -1 $BAMFILES | sort | grep -o -E $SAMPEXP | uniq))
+BAMSAMPLENUM=${#BAMSAMPLES[@]}
 ##############################----------##############################
 
 ##############################OPTIONS##############################
@@ -34,9 +36,14 @@ echo "Coverage with sample indices $startSample to $endSample"
 
 ##############################PIPELINE##############################
 for ((i = $startSample ; i < $endSample ; i++ ));do
-    bamsorted=$(ls -1 $BAMFILES | sort | head -n $(($i+1)) | tail -n 1 | grep "${SAMPLES[$i]}")
+	indexbam=0
+	while [ ! "${BAMSAMPLES[$indexbam]}" == "${SAMPLES[$i]}" ];do
+		((indexbam++))
+		[ $indexbam -gt $BAMSAMPLENUM ] && break
+	done
+    bamsorted=$(ls -1 $BAMFILES | sort | tail -n+$(($indexbam+1)) | head -n 1)
 	[ -z "$bamsorted" ] && \
-    { echo "Sample ${SAMPLES[$i]} does not match $BAMFILES"; continue; }
+    { echo "Sample ${SAMPLES[$i]} was not found in samples '${BAMSAMPLES[@]}' from $BAMBAIDIR"; continue; }
     samplename=$(cut -d"." -f1 <(basename "$bamsorted"))
 
 	echo "Processing sample ${SAMPLES[$i]}..."

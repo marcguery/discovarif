@@ -100,15 +100,25 @@ if [ $doSnp -eq 1 ];then
         -R $GENOME \
         -V $SNPDIR/cohort.g.vcf.gz \
         -O $SNPDIR/variants.vcf.gz
+    
+    echo "SNP/INDEL calling terminated"
+    echo "Fitering SNP/INDEL..."
 
+    echo "Extracting samples present in $DELLYSAMPLES from the VCF file..."
     goodsamples=($(cut -f1 "$DELLYSAMPLES"))
     allsamples=($(grep -m 1 "#CHROM" <(gunzip -c "$SNPDIR"/variants.vcf.gz)))
-
-    indices=($(for sample in ${goodsamples[@]}; do i=0; while [ ! "$sample" == "${allsamples[$i]}" ]; do ((i++)); done; echo $((i+1)); done))
-        
+    indices=()
+    for sample in ${goodsamples[@]}; do
+        samplepresent=1
+        i=0
+        while [ ! "$sample" == "${allsamples[$i]}" ]; do
+            ((i++))
+            [ $i -gt ${#allsamples[@]} ] && { echo "Sample $sample is not present in any sample from "$SNPDIR"/variants.vcf.gz, \
+                                                you should check the BAM RG field"; samplepresent=0; break; }
+        done
+        [ $samplepresent -eq 1 ] && indices+=($((i+1)))
+    done
     cut -f 1-9,$(echo ${indices[@]} | sed 's/ /,/g') <(gunzip -c "$SNPDIR"/variants.vcf.gz) | gzip -c > "$SNPDIR"/variants-filtered.vcf.gz
-
-    # ./VCF-score-filter.R "$SNPDIR"/variants-filtered.vcf.gz "0.75" "$SNPDIR"/variants-filtered-075.vcf
     
     mkdir -p "$SNPDIR"/alt08ref02
     $VARIF -vcf <(gunzip -c "$SNPDIR"/variants-filtered.vcf.gz) -gff "$GFF" -fasta "$GENOME" \
