@@ -1,6 +1,5 @@
 #!/bin/bash
 #Full pipeline (Wed 30 Sep 11:12:18 CEST 2020)
-source config.sh
 
 ##############################OPTIONS##############################
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
@@ -10,19 +9,24 @@ declare -i doCnv=0
 declare -i doOth=0
 declare -i maxthreads=1
 declare -i maxthreadspersample=1
+declare -i dry=0
 while getopts ":mscot:u:h" o; do
     case "${o}" in
         m) # Launch quality/mapping/mpileup step.
             doQma=1
+            dry=1
             ;;
         s) # Launch SNP/small INDEL step.
             doSnp=1
+            dry=1
             ;;
         c) # Launch CNV step.
             doCnv=1
+            dry=1
             ;;
         o) # Launch other variants step.
             doOth=1
+            dry=1
             ;;
         t) # Launch this number of processes in parallel
             maxthreads=$((OPTARG))
@@ -36,6 +40,9 @@ while getopts ":mscot:u:h" o; do
     esac
 done
 shift $((OPTIND-1))
+
+source config.sh
+
 [ $maxthreadspersample -gt $maxthreads ] && \
 { echo "Error: Maximum allowed threads of $maxthreads while $maxthreadspersample requested"; exit 1; }
 threadsamples=$(bc <<< $maxthreads/$maxthreadspersample)

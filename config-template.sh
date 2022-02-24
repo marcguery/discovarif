@@ -24,10 +24,7 @@ export READS="$DATADIR"/reads/TOBEFILLED #Wildcard to select all read files (e. 
 export SAMPEXP='TOBEFILLED' #Contains all the sequence of characters in read file names identifying samples
                             #(e. g., 'sample[0-9]{1,2}' if the samples are identified as: sample1, sample2, ..., 
                             # sample99')
-SAMPLES=($(ls -1 $READS | sort | grep -o -E $SAMPEXP | uniq))
-#Number of samples
-export SAMPLENUM=${#SAMPLES[@]}
-echo "Found $SAMPLENUM samples"
+number_of_samples=TOBEFILLED
 #Reads
 export IDR1="TOBEFILLED" #Unique sequence of characters in read file names identifying reads 1 (e. g. "R1", or "_R1_")
 export IDR2="TOBEFILLED" #Unique sequence of characters in read file names identifying reads 2 (e. g. "R2", or "_R2_")
@@ -69,7 +66,7 @@ export DELLYDIR="$VARIANTDIR"/Others
 #This script will copy your files from a distant server to your current session
 # if they are missing from your current session and if you provided a remote address
 
-if [ ! -z $REMOTEADDRESS ];then
+if [ ! -z $REMOTEADDRESS -a $dry -eq 1 ];then
     echo "Copying missing files in $DATADIR from $REMOTEADDRESS:$REMOTEDATADIR"
     mkdir -p "$DATADIR"
     ssh "$REMOTEADDRESS" [ -d "$REMOTEDATADIR" ] || \
@@ -82,6 +79,24 @@ if [ ! -z $REMOTEADDRESS ];then
         { echo "$REMOTEOUTDIR does not exist in $REMOTEADDRESS"; exit 1; }
     rsync -a --ignore-existing --progress "$REMOTEADDRESS":"$REMOTEOUTDIR"/ "$OUTDIR"/
 fi
+
+##############################----------##############################
+
+##############################STATS##############################
+
+SAMPLES=($(ls -1 $READS | sort | grep -o -E $SAMPEXP | uniq))
+#Number of samples
+export SAMPLENUM=${#SAMPLES[@]}
+
+declare -i oktocontinue=1
+[ ! $SAMPLENUM -eq $number_of_samples ] &&
+{ echo "Found $SAMPLENUM samples but expected $number_of_samples"; \
+echo "The sorted samples"; \
+echo "$(ls -1 $READS | sort)"; \
+echo "were identified with: ${SAMPLES[@]}"; oktocontinue=1; } ||
+{ echo "Successfully indexed $SAMPLENUM samples"; oktocontinue=0; }
+
+[ ! $oktocontinue -eq 0 ] && exit 1
 
 ##############################----------##############################
 
