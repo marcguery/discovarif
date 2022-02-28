@@ -3,17 +3,22 @@
 
 ##############################OPTIONS##############################
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
-declare -i doQma=0
+declare -i doQua=0
+declare -i doMap=0
 declare -i doSnp=0
 declare -i doCnv=0
 declare -i doOth=0
 declare -i maxthreads=1
 declare -i maxthreadspersample=1
 declare -i dry=0
-while getopts ":mscot:u:h" o; do
+while getopts ":qmscot:u:h" o; do
     case "${o}" in
-        m) # Launch quality/mapping/mpileup step.
-            doQma=1
+        q) # Launch quality step.
+            doQua=1
+            dry=1
+            ;;
+        m) # Launch mapping step.
+            doMap=1
             dry=1
             ;;
         s) # Launch SNP/small INDEL step.
@@ -40,36 +45,62 @@ while getopts ":mscot:u:h" o; do
     esac
 done
 shift $((OPTIND-1))
+if [[ $SLURM_JOBID =~ ^[0-9]+$ ]] ; then
+    LOC=$(dirname "$(scontrol show job $SLURM_JOBID | awk -F= '/Command=/{print $2}')")
+else
+    LOC=$(dirname "$(realpath $0)")
+fi
 
-source config.sh
+source "$LOC"/../config/config.sh
 
 [ $maxthreadspersample -gt $maxthreads ] && \
 { echo "Error: Maximum allowed threads of $maxthreads while $maxthreadspersample requested"; exit 1; }
 threadsamples=$(bc <<< $maxthreads/$maxthreadspersample)
 [ $threadsamples -gt $SAMPLENUM ] && { threadsamples=$SAMPLENUM; }
+
+echo "Samples are: ${SAMPLES[@]}"
 ##############################-------##############################
 
 ##############################PIPELINE##############################
 
-####Quality and alignment with each sample####
-if [ $doQma -eq 1 ];then
-    echo "Doing the Quality/mapping/variant step for each sample..."
+####Quality with each sample####
+if [ $doQua -eq 1 ];then
+    echo "Doing the Quality step for each sample..."
+
+    start_index=0
+    sequential_per_process=0
+    iter=0
+    while [ $start_index -le $(($SAMPLENUM-$sequential_per_process)) ];do
+        sequential_per_process=$(bc <<< $(($SAMPLENUM-$start_index))/$(($threadsamples-$iter)))
+        end_index=$(($start_index+$sequential_per_process))
+        echo "New batch: ${SAMPLES[$start_index]} to ${SAMPLES[$(($end_index-1))]}"
+        "$LOC"/../src/mapper-caller.sh -q -s $start_index:$end_index -t $maxthreadspersample &
+        start_index=$end_index
+        ((iter++))
+    done
+    wait
+    echo "Done the Quality step!"
+fi
+########
+
+####Alignment with each sample####
+if [ $doMap -eq 1 ];then
+    echo "Doing the Mapping step for each sample..."
     $BWA index "$GENOME"
 
     start_index=0
     sequential_per_process=0
     iter=0
-    echo ${SAMPLES[@]}
     while [ $start_index -le $(($SAMPLENUM-$sequential_per_process)) ];do
         sequential_per_process=$(bc <<< $(($SAMPLENUM-$start_index))/$(($threadsamples-$iter)))
         end_index=$(($start_index+$sequential_per_process))
         echo "New batch: ${SAMPLES[$start_index]} to ${SAMPLES[$(($end_index-1))]}"
-        ./mapper-caller.sh -m -s $start_index:$end_index -t $maxthreadspersample &
+        "$LOC"/../src/mapper-caller.sh -m -s $start_index:$end_index -t $maxthreadspersample &
         start_index=$end_index
         ((iter++))
     done
     wait
-    echo "Done the Mapping step for each sample!"
+    echo "Done the Mapping step!"
 fi
 ########
 
@@ -83,7 +114,6 @@ if [ $doSnp -eq 1 ];then
     start_index=0
     sequential_per_process=0
     iter=0
-    echo ${SAMPLES[@]}
     export TMPGVCF=$(mktemp -d "$SNPDIR"/_tmp-gvcf.XXXXXX)
     trap "rm -rf $TMPGVCF" 0 2 3 15
 
@@ -91,7 +121,7 @@ if [ $doSnp -eq 1 ];then
         sequential_per_process=$(bc <<< $(($SAMPLENUM-$start_index))/$(($threadsamples-$iter)))
         end_index=$(($start_index+$sequential_per_process))
         echo "New batch: ${SAMPLES[$start_index]} to ${SAMPLES[$(($end_index-1))]}"
-        ./mapper-caller.sh -v -s $start_index:$end_index -t $maxthreadspersample &
+        "$LOC"/../src/mapper-caller.sh -v -s $start_index:$end_index -t $maxthreadspersample &
         start_index=$end_index
         ((iter++))
     done
@@ -111,8 +141,8 @@ if [ $doSnp -eq 1 ];then
     echo "SNP/INDEL calling terminated"
     echo "Fitering SNP/INDEL..."
 
-    echo "Extracting samples present in $DELLYSAMPLES from the VCF file..."
-    goodsamples=($(cut -f1 "$DELLYSAMPLES"))
+    echo "Extracting good quality samples (keep=yes) from the file $SAMPLEFILE..."
+    goodsamples=($(awk '$5=="yes" { print $1 }' <(tail -n+2 $SAMPLEFILE)))
     allsamples=($(grep -m 1 "#CHROM" <(gunzip -c "$SNPDIR"/variants.vcf.gz)))
     indices=()
     for sample in ${goodsamples[@]}; do
@@ -121,7 +151,7 @@ if [ $doSnp -eq 1 ];then
         while [ ! "$sample" == "${allsamples[$i]}" ]; do
             ((i++))
             [ $i -gt ${#allsamples[@]} ] && { echo "Sample $sample is not present in any sample from "$SNPDIR"/variants.vcf.gz, \
-                                                you should check the BAM RG field"; samplepresent=0; break; }
+                                                you should check the BAM @RG field"; samplepresent=0; break; }
         done
         [ $samplepresent -eq 1 ] && indices+=($((i+1)))
     done
@@ -181,12 +211,11 @@ if [ $doCnv -eq 1 ];then
     start_index=0
     sequential_per_process=0
     iter=0
-    echo ${SAMPLES[@]}
     while [ $start_index -le $(($SAMPLENUM-$sequential_per_process)) ];do
         sequential_per_process=$(bc <<< $(($SAMPLENUM-$start_index))/$(($threadsamples-$iter)))
         end_index=$(($start_index+$sequential_per_process))
         echo "New batch: ${SAMPLES[$start_index]} to ${SAMPLES[$(($end_index-1))]}"
-        ./get-coverage.sh -s $start_index:$end_index &
+        "$LOC"/../src/get-coverage.sh -s $start_index:$end_index &
         start_index=$end_index
         ((iter++))
     done
@@ -194,7 +223,11 @@ if [ $doCnv -eq 1 ];then
     
     ##Getting filtered CNVs
     mkdir -p "$CNVDIR"/summary
-    ./CNV-caller.R "$CNVDIR" "-perbasecds-core.coverage" "$CNVDIR"/summary "-core-cov.tsv" "CNV_withoutAPI-MT.csv" $CONTROLNAME
+    CONTROLSAMPLES=($(awk '$4=="control" { print $1 }' $SAMPLEFILE))
+    "$LOC"/../src/CNV-caller.R -indir="$CNVDIR" -incoveragepattern="-perbasecds-core.coverage" \
+        -outdir="$CNVDIR"/summary -outcovpattern="-core-cov.tsv" \
+        -outsummary="CNV_withoutAPI-MT.csv" -controlsamples="$(echo "${CONTROLSAMPLES[@]}")" \
+        -ratiotumor="0.2" -ratiocontrol="1"
     
     echo "Done the CNVs step!"
 fi
@@ -204,8 +237,15 @@ fi
 if [ $doOth -eq 1 ];then
     echo "Doing the Other variants step..."
     mkdir -p "$DELLYDIR"
-    ./DELLY-caller.sh -t $maxthreads -g $GENOME -b $DELLYSAMPLES \
-        -s "$(ls -1 $BAMFILES | grep -v -E $CONTROLNAME)" -c "$(ls -1 $BAMFILES | grep -E $CONTROLNAME)"
+    cut -f1,4 $SAMPLEFILE | tail -n+2 > "$OUTDIR"/delly-samples.tsv
+    CONTROLSAMPLES=($(tail -n+2 $SAMPLEFILE | awk '$4=="control" { print $1 }' $SAMPLEFILE))
+    CONTROLBAMFILES=($(echo "$(printf $BAMBAIDIR/'%s'$BAMEXT'\n' "${CONTROLSAMPLES[@]}")"))
+    TUMORSAMPLES=($(tail -n+2 $SAMPLEFILE | awk '$4!="control" { print $1 }'))
+    TUMORBAMFILES=($(echo "$(printf $BAMBAIDIR/'%s'$BAMEXT'\n' "${TUMORSAMPLES[@]}")"))
+
+    "$LOC"/../src/DELLY-caller.sh -t $maxthreads -g $GENOME -b "$OUTDIR"/delly-samples.tsv \
+        -s "$(echo ${TUMORBAMFILES[@]})" \
+        -c "$(echo ${CONTROLBAMFILES[@]})"
     echo "Done the Other variants step!"
 fi
 ########

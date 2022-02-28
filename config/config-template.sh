@@ -13,25 +13,17 @@ REMOTEDATADIR= #Absolute path to a remote data directory.
 REMOTEADDRESS= # Address of the remote machine hosting the files.
                         # Fill this variable if your files are located on a server.
 #Fasta file
-export GENOME="$DATADIR"/Genome/TOBEFILLED #Absolute path to fasta reference genome file
+export GENOME="$DATADIR"/TOBEFILLED #Absolute path to fasta reference genome file
 export PLOIDY=1 #Ploidy of the genome
-export INFOGENOME="$DATADIR"/Genome/TOBEFILLED #Absolute path to tabulated file with core annotations of the genome 
+export INFOGENOME="$DATADIR"/TOBEFILLED #Absolute path to tabulated file with core annotations of the genome 
                                                #(see Miles 2016 for Plasmodium: 10.1101/gr.203711.115)
-export GFF="$DATADIR"/Genome/TOBEFILLED #Absolute path to gff features file
-#FASTQ Read files
-export READS="$DATADIR"/reads/TOBEFILLED #Wildcard to select all read files (e. g., "$DATADIR"/reads/*.fastq.gz)
-#Regular expression to differentiate samples
-export SAMPEXP='TOBEFILLED' #Contains all the sequence of characters in read file names identifying samples
-                            #(e. g., 'sample[0-9]{1,2}' if the samples are identified as: sample1, sample2, ..., 
-                            # sample99')
-number_of_samples=TOBEFILLED
-#Reads
-export IDR1="TOBEFILLED" #Unique sequence of characters in read file names identifying reads 1 (e. g. "R1", or "_R1_")
-export IDR2="TOBEFILLED" #Unique sequence of characters in read file names identifying reads 2 (e. g. "R2", or "_R2_")
-#Control sample
-export CONTROLNAME="TOBEFILLED" #Name of the control sample used for the CNV discovery. It is the name of the
-                                #corresponding bam file, without the extensions (e. g., if the bam file is 
-                                #"control.sorted.bam", its name is "control")
+export GFF="$DATADIR"/TOBEFILLED #Absolute path to gff features file
+
+export SAMPLEFILE="$DATADIR"/TOBEFILLED #Absolute path to sample tsv file
+#FASTQ Read files location
+export READDIR="$DATADIR"/TOBEFILLED
+#Adapters that shouuld be clipped (Trimmomatic)
+export CLIPS="$DATADIR"/TOBEFILLED
 
 ##OUTPUT##
 #Path for all output
@@ -43,14 +35,12 @@ REMOTEOUTDIR= #Absolute path to a remote output directory.
 
 #Quality files
 export QUALDIR="$OUTDIR"/fastqc
+#Trimmed read files
 export TRIMDIR="$OUTDIR"/trim
-#Trimmed files
-export TRIMREADS="$TRIMDIR"/*.paired.gz
-#SAM files
-export SAMDIR="$OUTDIR"/sam
+export TRIMEXT=".paired.gz"
 #BAM files and their indexes
 export BAMBAIDIR="$OUTDIR"/bambai
-export BAMFILES="$BAMBAIDIR"/*.sorted.bam
+export BAMEXT=".dd.sorted.bam"
 #Variant files
 export VARIANTDIR="$OUTDIR"/variants
 #SNP/small INDEL directory
@@ -82,21 +72,17 @@ fi
 
 ##############################----------##############################
 
-##############################STATS##############################
+##############################CHECK##############################
 
-SAMPLES=($(ls -1 $READS | sort | grep -o -E $SAMPEXP | uniq))
+[ ! -f $SAMPLEFILE ] && { "Sample file $SAMPLEFILE does not exist"; exit 1; }
+SAMPLES=($(cut -f1 $SAMPLEFILE | tail -n+2))
 #Number of samples
-export SAMPLENUM=${#SAMPLES[@]}
+export SAMPLENUM=$(($(cut -f1 $SAMPLEFILE | tail -n+2 | sort | uniq | wc -l)))
 
-declare -i oktocontinue=1
-[ ! $SAMPLENUM -eq $number_of_samples ] &&
-{ echo "Found $SAMPLENUM samples but expected $number_of_samples"; \
-echo "The sorted samples"; \
-echo "$(ls -1 $READS | sort)"; \
-echo "were identified with: ${SAMPLES[@]}"; oktocontinue=1; } ||
-{ echo "Successfully indexed $SAMPLENUM samples"; oktocontinue=0; }
-
-[ ! $oktocontinue -eq 0 ] && exit 1
+[ ! $SAMPLENUM -eq ${#SAMPLES[@]} ] &&
+{ echo "Found $SAMPLENUM uniquely identified samples but expected ${#SAMPLES[@]}"; \
+echo "The sorted samples with their number of occurences (should all be unique):"; \
+echo "$(cut -f1 $SAMPLEFILE | tail -n+2 | sort | uniq -c)"; exit 1; }
 
 ##############################----------##############################
 
@@ -105,15 +91,12 @@ echo "were identified with: ${SAMPLES[@]}"; oktocontinue=1; } ||
 
 export FASTQC=fastqc
 export TRIMMOMATIC=TrimmomaticPE
-export CLIPS="$DATADIR"/adapters/TOBEFILLED
 export BWA=bwa
 export SAMTOOLS=samtools
 export BCFTOOLS=bcftools
 export VARIF=varif
 export BEDTOOLS=bedtools
 export DELLY=delly
-export DELLYSAMPLES="$DATADIR"/dellysamples/TOBEFILLED #Tablulated file containing 'tumor' and 'control'
-                                                       #samples (see DELLY documentation in somatic mode)
 export BEDGRAPHTOBIGWIG=bedGraphToBigWig
 export PICARD=PicardCommandLine
 export GATK=gatk

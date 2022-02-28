@@ -9,15 +9,16 @@ library(reshape2)
 
 ##############################PARAMETERS##############################
 
-args <- commandArgs(trailingOnly=T)
+args <- R.utils::commandArgs(trailingOnly=T, asValues=T)
 options(stringsAsFactors = F)
-
-indir <- args[1]
-incoveragepattern <- args[2]
-outdir <- args[3]
-outcovpattern <- args[4]
-outsummary <- args[5]
-controlsample <- args[6]
+indir <- args[1][[1]]
+incoveragepattern <- args[2][[1]]
+outdir <- args[3][[1]]
+outcovpattern <- args[4][[1]]
+outsummary <- args[5][[1]]
+controlsamples <- strsplit(args[6][[1]], split = " ")[[1]]
+ratiotumor <- as.numeric(args[7][[1]])
+ratiocontrol <- as.numeric(args[8][[1]])
 
 ##############################----------##############################
 
@@ -57,17 +58,15 @@ for (f in coveragefiles){
     }else {
         ratiocds.05 <- merge(ratiocds.05, cov.cds)
     }
-    ########
-    print(dim(ratiocds.05))
 
 }
 
 #####Best CNVs####
-score_from_cov <- function(cdsRow, control){
-  if (length(which(cdsRow >= 1.8))>=20 & cdsRow[control] < 1.5){
+score_from_cov <- function(cdsRow, control, mintumor, mincontrol){
+  if (length(which(cdsRow >= 1.8)) >= mintumor & length(which(cdsRow[control] < 1.5)) >= mincontrol ){
     multFac <- 1
   }
-  else if (length(which(cdsRow <= (0.05)))>=20 & cdsRow[control] > 0.5){
+  else if (length(which(cdsRow <= (0.05))) >= mintumor & length(which(cdsRow[control] > 0.5)) >= mincontrol){
     multFac <- -1
   }
   else{
@@ -77,16 +76,26 @@ score_from_cov <- function(cdsRow, control){
   score <- multFac*min(100,max(cdsRow)/min(cdsRow))
   return(score)
 }
-if (all(colnames(ratiocds.05) != make.names(controlsample))){
+if (! all(make.names(controlsamples)%in%colnames(ratiocds.05))){
+  write.csv(ratiocds.05, paste(outdir, outsummary, sep="/"), 
+            quote = F, row.names = F)
   print(colnames(ratiocds.05[,4:(length(coveragefiles)+3)]))
-  stop(paste0("The control sample \"", 
-  controlsample, 
-  "\" was not found in the dataset above, aborting..."))
+  stop(paste0("The control samples \"", 
+  controlsamples, 
+  "\" were not all not found in the dataset above, aborting..."))
 }
-controlnumber <- which(colnames(ratiocds.05) == make.names(controlsample))
-print(paste0("The control sample is ", controlsample, " (", controlnumber, "th column)"))
+
+controlindexes <- which(colnames(ratiocds.05) %in% make.names(controlsamples))
+mincontrol <- round(ceiling(length(controlindexes)/(1/ratiocontrol)))
+tumornumber <- length(colnames(ratiocds.05)) - length(controlindexes) - 3
+mintumor <- round(ceiling(tumornumber/(1/ratiotumor)))
+
+print(paste0("The control sample ", as.character(controlsamples), " is at the ", as.character(controlindexes), "th column"))
+print(paste0("Looking for variants present in at least ", mintumor," of the ", tumornumber
+  ," samples and absent in at least ", mincontrol, " of the ",
+  length(controlindexes), " control samples..."))
 ratiocds.05$score <- apply(ratiocds.05[,4:(length(coveragefiles)+3)], 1,
-                           FUN = score_from_cov, control=controlnumber-3)
+                           FUN = score_from_cov, control=controlindexes-3, mintumor=mintumor, mincontrol=mincontrol)
 
 ratiocds.05 <- ratiocds.05[with(ratiocds.05, order(V2, V3, V4)), ]
 ratiocds.05 <- ratiocds.05[ratiocds.05$score!=0,]

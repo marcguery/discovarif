@@ -3,9 +3,8 @@
 
 ##############################PARAMETERS##############################
 #I had to set those here cause bash would not allow to export array
-SAMPLES=($(ls -1 $READS | sort | grep -o -E $SAMPEXP | uniq))
-BAMSAMPLES=($(ls -1 $BAMFILES | sort | grep -o -E $SAMPEXP | uniq))
-BAMSAMPLENUM=${#BAMSAMPLES[@]}
+SAMPLES=($(cut -f1 $SAMPLEFILE | tail -n+2))
+BAMFILES=($(echo "$(printf $BAMBAIDIR/'%s'$BAMEXT'\n' "${SAMPLES[@]}")"))
 ##############################----------##############################
 
 ##############################OPTIONS##############################
@@ -26,7 +25,7 @@ done
 shift $((OPTIND-1))
 [ $startSample -ge $endSample -o $endSample -gt $SAMPLENUM ] \
 && { 
-    echo "The indices provided do not match the $SAMPLENUM samples detected in $BAMFILES";
+    echo "The indices provided do not match the $SAMPLENUM samples";
     echo "Indices should be between 0 and $SAMPLENUM, \
 like 0:$SAMPLENUM or 1:$(($SAMPLENUM-1))";
     exit 1; }
@@ -36,14 +35,9 @@ echo "Coverage with sample indices $startSample to $endSample"
 
 ##############################PIPELINE##############################
 for ((i = $startSample ; i < $endSample ; i++ ));do
-	indexbam=0
-	while [ ! "${BAMSAMPLES[$indexbam]}" == "${SAMPLES[$i]}" ];do
-		((indexbam++))
-		[ $indexbam -gt $BAMSAMPLENUM ] && break
-	done
-    bamsorted=$(ls -1 $BAMFILES | sort | tail -n+$(($indexbam+1)) | head -n 1)
-	[ -z "$bamsorted" ] && \
-    { echo "Sample ${SAMPLES[$i]} was not found in samples '${BAMSAMPLES[@]}' from $BAMBAIDIR"; continue; }
+    bamsorted=${BAMFILES[$i]}
+	[ ! -f "$bamsorted" ] && \
+    { echo "Sample $bamsorted was not found in bam folder $BAMBAIDIR"; continue; }
     samplename=$(cut -d"." -f1 <(basename "$bamsorted"))
 
 	echo "Processing sample ${SAMPLES[$i]}..."
