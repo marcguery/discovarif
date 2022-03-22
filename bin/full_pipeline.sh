@@ -3,6 +3,7 @@
 
 ##############################OPTIONS##############################
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
+declare -i doTes=0
 declare -i doQua=0
 declare -i doMap=0
 declare -i doSnp=0
@@ -11,8 +12,12 @@ declare -i doOth=0
 declare -i maxthreads=1
 declare -i maxthreadspersample=1
 declare -i dry=0
-while getopts ":qmscot:u:h" o; do
+while getopts ":bqmscok:t:u:h" o; do
     case "${o}" in
+        b) # Launch test step.
+            doTes=1
+            dry=1
+            ;;
         q) # Launch quality step.
             doQua=1
             dry=1
@@ -33,6 +38,9 @@ while getopts ":qmscot:u:h" o; do
             doOth=1
             dry=1
             ;;
+        k) # Use this configuration file
+            configfile="$OPTARG"
+            ;;
         t) # Launch this number of processes in parallel
             maxthreads=$((OPTARG))
             ;;
@@ -51,7 +59,13 @@ else
     LOC=$(dirname "$(realpath $0)")
 fi
 
-source "$LOC"/../config/config.sh
+if [ -z "$configfile" -o ! -f "$configfile" ];then
+    echo "Selecting the config template file which should only be used for testing"
+    echo "Use -k option to provide your own config file"
+    configfile="$LOC"/../config/config-template.sh
+fi
+
+source "$configfile"
 
 [ $maxthreadspersample -gt $maxthreads ] && \
 { echo "Error: Maximum allowed threads of $maxthreads while $maxthreadspersample requested"; exit 1; }
@@ -62,6 +76,34 @@ echo "Samples are: ${SAMPLES[@]}"
 ##############################-------##############################
 
 ##############################PIPELINE##############################
+
+####Test####
+if [ $doTes -eq 1 ];then
+    echo "Testing each tool..."
+    tools=("$FASTQC --version" "$TRIMMOMATIC -version" \
+    $BWA "$SAMTOOLS --version" \
+    "$BCFTOOLS --version" "$VARIF -h" \
+    "$BEDTOOLS --version" "$DELLY --version" "$BEDGRAPHTOBIGWIG" \
+    "$PICARD" "$GATK --version")
+
+    for ((i=0;i<${#tools[@]};i++));do
+        ${tools[$i]} &> /dev/null
+        [ "$?" -eq 127 ] && \
+            { echo "Command ${tools[$i]} not found"; echo "Check the executable path in the config file"; }
+    done
+
+    echo "Testing raw data files"
+    [ -d $DATADIR ] || echo "The folder DATADIR does not exist"
+    [ -f $GENOME ] || echo "The file GENOME does not exist"
+    [ -f $INFOGENOME ] || echo "The file INFOGENOME does not exist"
+    [ -f $GFF ] || echo "The file GFF does not exist"
+    [ -f $SAMPLEFILE ] || echo "The file SAMPLEFILE does not exist"
+    [ -d $READDIR ] || echo "The folder READDIR does not exist"
+    [ -f $CLIPS ] || echo "The file CLIPS does not exist"
+    [ -d $OUTDIR ] || echo "The folder OUTDIR does not exist"
+    exit 0
+fi
+########
 
 ####Quality with each sample####
 if [ $doQua -eq 1 ];then
@@ -227,7 +269,7 @@ if [ $doCnv -eq 1 ];then
     "$LOC"/../src/CNV-caller.R -indir="$CNVDIR" -incoveragepattern="-perbasecds-core.coverage" \
         -outdir="$CNVDIR"/summary -outcovpattern="-core-cov.tsv" \
         -outsummary="CNV_withoutAPI-MT.csv" -controlsamples="$(echo "${CONTROLSAMPLES[@]}")" \
-        -ratiotumor="0.2" -ratiocontrol="1"
+        -ratiotumor="0.5" -ratiocontrol="0.5"
     
     echo "Done the CNVs step!"
 fi

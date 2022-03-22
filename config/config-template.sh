@@ -22,7 +22,7 @@ export GFF="$DATADIR"/TOBEFILLED #Absolute path to gff features file
 export SAMPLEFILE="$DATADIR"/TOBEFILLED #Absolute path to sample tsv file
 #FASTQ Read files location
 export READDIR="$DATADIR"/TOBEFILLED
-#Adapters that shouuld be clipped (Trimmomatic)
+#Adapters that should be clipped (Trimmomatic)
 export CLIPS="$DATADIR"/TOBEFILLED
 
 ##OUTPUT##
@@ -56,7 +56,7 @@ export DELLYDIR="$VARIANTDIR"/Others
 #This script will copy your files from a distant server to your current session
 # if they are missing from your current session and if you provided a remote address
 
-if [ ! -z $REMOTEADDRESS -a $dry -eq 1 ];then
+if [ ! -z "$REMOTEADDRESS" -a $dry -eq 1 ];then
     echo "Copying missing files in $DATADIR from $REMOTEADDRESS:$REMOTEDATADIR"
     mkdir -p "$DATADIR"
     ssh "$REMOTEADDRESS" [ -d "$REMOTEDATADIR" ] || \
@@ -69,20 +69,6 @@ if [ ! -z $REMOTEADDRESS -a $dry -eq 1 ];then
         { echo "$REMOTEOUTDIR does not exist in $REMOTEADDRESS"; exit 1; }
     rsync -a --ignore-existing --progress "$REMOTEADDRESS":"$REMOTEOUTDIR"/ "$OUTDIR"/
 fi
-
-##############################----------##############################
-
-##############################CHECK##############################
-
-[ ! -f $SAMPLEFILE ] && { "Sample file $SAMPLEFILE does not exist"; exit 1; }
-SAMPLES=($(cut -f1 $SAMPLEFILE | tail -n+2))
-#Number of samples
-export SAMPLENUM=$(($(cut -f1 $SAMPLEFILE | tail -n+2 | sort | uniq | wc -l)))
-
-[ ! $SAMPLENUM -eq ${#SAMPLES[@]} ] &&
-{ echo "Found $SAMPLENUM uniquely identified samples but expected ${#SAMPLES[@]}"; \
-echo "The sorted samples with their number of occurences (should all be unique):"; \
-echo "$(cut -f1 $SAMPLEFILE | tail -n+2 | sort | uniq -c)"; exit 1; }
 
 ##############################----------##############################
 
@@ -102,3 +88,22 @@ export PICARD=PicardCommandLine
 export GATK=gatk
 
 ##############################-----##############################
+
+##############################CHECK##############################
+
+[ ! -f $SAMPLEFILE ] && { echo "Sample file $SAMPLEFILE does not exist"; SAMPLENUM=0; return 0; }
+newsamplefilename="$(basename "${SAMPLEFILE%.*}".run."${SAMPLEFILE##*.}")"
+head -n1 $SAMPLEFILE > "$(dirname $SAMPLEFILE)/$newsamplefilename"
+tail -n+2 $SAMPLEFILE | awk '$5=="yes" { print $0 }' $SAMPLEFILE >> "$(dirname $SAMPLEFILE)/$newsamplefilename"
+export SAMPLEFILE="$(dirname $SAMPLEFILE)/$newsamplefilename"
+
+SAMPLES=($(cut -f1 $SAMPLEFILE | tail -n+2))
+#Number of samples
+export SAMPLENUM=$(($(cut -f1 $SAMPLEFILE | tail -n+2 | sort | uniq | wc -l)))
+
+[ ! $SAMPLENUM -eq ${#SAMPLES[@]} ] &&
+{ echo "Found $SAMPLENUM uniquely identified samples but expected ${#SAMPLES[@]}"; \
+echo "The sorted samples with their number of occurences (should all be unique):"; \
+echo "$(cut -f1 $SAMPLEFILE | tail -n+2 | sort | uniq -c)"; exit 1; }
+
+##############################----------##############################

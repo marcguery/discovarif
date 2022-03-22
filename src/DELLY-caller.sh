@@ -8,8 +8,8 @@ usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 declare -i maxthreads=1
 declare -i minsize=0
 altaf=0.5
-ratiogeno=0
-declare -i coverage=5
+ratiogeno=0.3
+declare -i coverage=10
 controlcontamination=2
 while getopts ":s:c:b:g:t:m:a:r:v:d:" o; do
     case "${o}" in

@@ -1,6 +1,6 @@
 # discovarif
 
-Starting with paired reads, this pipeline will get variants such as:
+Starting with paired reads, this pipeline will filter reads and get variants such as:
 
 - SNPs and small INDELS
 - CNVs
@@ -8,9 +8,35 @@ Starting with paired reads, this pipeline will get variants such as:
 
 This pipeline was tested and adapted to a *Plasmodium falciparum* dataset (13 samples and 1 control) used to find drug resistance markers.
 
-## File tree
+The main script is launched with the command
 
-After having run all the pipeline, the file tree should look like the one below.
+```bash
+./bin/full-pipeline -h
+```
+
+The different options available will let you select which step of the pipeline to run, the location of the configuration file and the number of processors to use.
+
+## Tutorial
+
+To check if you can run the pipeline, run the command
+
+```bash
+./bin/full-pipeline -b
+```
+
+Or, if you have already modified the config file:
+
+```bash
+./bin/full-pipeline -b -k config/config.sh
+```
+
+Check the output of this command to see if you have successfully installed all the required tools. This command will also tell if the folder and files that you provided in the *config* file do indeed exist.
+
+### File tree
+
+To work properly, the pipeline needs raw data files all located in a dedicated folder (see **DATADIR** in the config file). The entirety of the folder will be copied to a distant server if you happen to have your files remotely located (in that case files should be located under a dedicated remote folder, **REMOTEDATADIR** from the config file).
+
+After having run all the pipeline, the file tree should look like the one below. You are only required to provide the path to the dedicated output folder (**OUTDIR** in the *config* file), the rest will be created according to the folders mentioned in the *config* file. Again if you use a remote folder, the output already created should be under a dedicated remote folder (**REMOTEOUTDIR** from the config file).
 
 ```bash
 ├── out
@@ -39,22 +65,58 @@ Contents of this file tree are described below.
    * **Others**: DELLY variants
    * **SNPs-sINDELs**: GATK variants
 
-## `Config` file
+### `Config` file
 
-A template is provided in the `config` folder. Make sure to provide all the input files and binaries necessary for the pipeline to be launched properly.
+Once you have all you raw data files located under a dedicated folder, copy the template *config-template.sh* and create your own config file.
+
+```bash
+cp config/config-template.sh config/config.sh
+```
+
+Make sure to provide all the input files and binaries necessary for the pipeline to be launched properly. Only the *TOBEFILLED* part are required.
 
 To set up the pipeline, you should be able to provide:
 
 * **Genome**: Must include FASTA, GFF, Core/Non core genome, ploidy
 * **Reads**: The location of the reads, the sequencing adapters to be clipped
 
-## `Samples` file
+### `Samples` file
 
-A template is provided in the `config` folder. 
+A template is provided in the `config` folder. This file should be located in the **DATADIR** folder. For example, use the command:
 
-Each line corresponds to a sample with a uniquely identified name and both read file names mentionned in the *pair1* and *pair2* fields (the directory where the reads are located is mentionned in the `config` file). The *group* field should contain samples annotated as control or tumor. The *keep* field is used by the variant filtering step to extract only samples annotated as yes and exclude those annotated as no.
+```
+cp config/samples-template.sh $DATADIR/samples.sh
+```
+
+Each line corresponds to a sample with a uniquely identified name and both read file names mentioned in the *pair1* and *pair2* fields (the directory where the reads are located is mentioned in the `config` file). The *group* field should contain samples annotated as control or tumor. The *keep* field is used to tell the pipeline to process samples annotated as yes and exclude those annotated as no.
+
+### Run
+
+Now that you have your own config file and your samples file, you can run the pipeline (Filtering step) using the command
+
+```bash
+./bin/full-pipeline -k config/config.sh -q
+```
+
+For more precisions n the different step, check the next paragraph.
 
 ## Pipeline
+
+The available commands are printed with the *-h* option:
+
+```bash
+./bin/full_pipeline.sh usage:
+        b) # Launch test step.
+        q) # Launch quality step.
+        m) # Launch mapping step.
+        s) # Launch SNP/small INDEL step.
+        c) # Launch CNV step.
+        o) # Launch other variants step.
+        k) # Use this configuration file
+        t) # Launch this number of processes in parallel
+        u) # Launch this number of processes for each sample
+        h | *) # Show help.
+```
 
 Here are quickly described the steps you can launch using the options of the `full_pipeline.sh` file.
 
