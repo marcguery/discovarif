@@ -54,7 +54,8 @@ while getopts ":bqmscok:t:u:h" o; do
 done
 shift $((OPTIND-1))
 if [[ $SLURM_JOBID =~ ^[0-9]+$ ]] ; then
-    LOC=$(dirname "$(scontrol show job $SLURM_JOBID | awk -F= '/Command=/{print $2}')")
+    LOC=($(echo "$(scontrol show job $SLURM_JOBID | awk -F= '/Command=/{print $2}')"))
+    LOC=$(dirname "${LOC[0]}")
 else
     LOC=$(dirname "$(realpath $0)")
 fi

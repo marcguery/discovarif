@@ -52,26 +52,6 @@ export DELLYDIR="$VARIANTDIR"/Others
 
 ##############################----------##############################
 
-##############################SERVER##############################
-#This script will copy your files from a distant server to your current session
-# if they are missing from your current session and if you provided a remote address
-
-if [ ! -z "$REMOTEADDRESS" -a $dry -eq 1 ];then
-    echo "Copying missing files in $DATADIR from $REMOTEADDRESS:$REMOTEDATADIR"
-    mkdir -p "$DATADIR"
-    ssh "$REMOTEADDRESS" [ -d "$REMOTEDATADIR" ] || \
-        { echo "$REMOTEDATADIR does not exist in $REMOTEADDRESS"; exit 1; }
-    rsync -a --ignore-existing --progress "$REMOTEADDRESS":"$REMOTEDATADIR"/ "$DATADIR"/
-
-    echo "Copying missing files in $OUTDIR from $REMOTEADDRESS:$REMOTEOUTDIR"
-    mkdir -p "$OUTDIR"
-    ssh "$REMOTEADDRESS" [ -d "$REMOTEOUTDIR" ] || \
-        { echo "$REMOTEOUTDIR does not exist in $REMOTEADDRESS"; exit 1; }
-    rsync -a --ignore-existing --progress "$REMOTEADDRESS":"$REMOTEOUTDIR"/ "$OUTDIR"/
-fi
-
-##############################----------##############################
-
 ##############################UTILS##############################
 # Provide the path to all executables and config files
 
@@ -88,6 +68,27 @@ export PICARD=PicardCommandLine
 export GATK=gatk
 
 ##############################-----##############################
+
+##############################SERVER##############################
+#This script will copy your files from a distant server to your current session
+# if they are missing from your current session and if you provided a remote address
+
+if [ ! -z "$REMOTEADDRESS" -a $dry -eq 1 ];then
+    echo "Copying missing files in $DATADIR from $REMOTEADDRESS:$REMOTEDATADIR"
+    mkdir -p "$DATADIR"
+    ssh "$REMOTEADDRESS" [ -d "$REMOTEDATADIR" ] || \
+        { echo "$REMOTEDATADIR does not exist in $REMOTEADDRESS"; exit 1; }
+    rsync -a --ignore-existing --progress "$REMOTEADDRESS":"$REMOTEDATADIR"/ "$DATADIR"/
+
+    echo "Copying missing files in $OUTDIR from $REMOTEADDRESS:$REMOTEOUTDIR"
+    mkdir -p "$OUTDIR"
+    ssh "$REMOTEADDRESS" [ -d "$REMOTEOUTDIR" ] && \
+    { rsync -a --ignore-existing --progress "$REMOTEADDRESS":"$REMOTEOUTDIR"/ "$OUTDIR"/; } || \
+    { echo "$REMOTEOUTDIR does not exist in $REMOTEADDRESS"; }
+    
+fi
+
+##############################----------##############################
 
 ##############################CHECK##############################
 
