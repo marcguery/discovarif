@@ -135,6 +135,11 @@ if [ $doMapp -eq 1 ];then
 
         ##Indexing sorted deduplicated BAM
         $SAMTOOLS index -@ $(($threads-1)) "$BAMBAIDIR/$bamdedupl"
+
+        ##Removing tmp files
+        [ -f "$BAMBAIDIR/$bamdedupl".bai ] && \
+            rm "$BAMBAIDIR/tmp/sam/$sam" "$BAMBAIDIR/tmp/$bam" "$BAMBAIDIR/tmp/$bamsorted" || \
+            echo "Could not remove tmp files because index file $BAMBAIDIR/$bamdedupl.bai does not exist"
     done
 fi
 
