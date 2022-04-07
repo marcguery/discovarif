@@ -1,7 +1,7 @@
 #!/bin/bash
 #Full pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
-binversion="0.0.1"
+binversion="0.0.2"
 
 ##############################OPTIONS##############################
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
@@ -146,14 +146,14 @@ fi
 if [ $doSnp -eq 1 ];then
     echo "Doing the SNPs/INDELs step..."
     mkdir -p "$SNPDIR"
+    mkdir -p "$SNPDIR"/_tmp/
+    mkdir -p "$SNPDIR"/varif_output/
 
     $GATK CreateSequenceDictionary -R $GENOME
 
-    start_index=0
-    sequential_per_process=0
-    iter=0
-    export TMPGVCF=$(mktemp -d "$SNPDIR"/_tmp-gvcf.XXXXXX)
-    trap "rm -rf $TMPGVCF" 0 2 3 15
+    export TMPGVCF=$(mktemp -d "$SNPDIR"/_tmp/gvcf.XXXXXX)
+
+    echo "The temporary folder for this GATK run is $TMPGVCF"
 
     seq -s " " 0 $(($SAMPLENUM-1)) | \
         xargs -d ' ' -n1 -P $samplesperrun bash -c \
@@ -172,7 +172,6 @@ if [ $doSnp -eq 1 ];then
         -O $SNPDIR/variants.vcf.gz
     
     echo "SNP/INDEL calling terminated"
-    echo "Fitering SNP/INDEL..."
 
     echo "Extracting good quality samples (keep=yes) from the file $SAMPLEFILE..."
     goodsamples=($(awk '$5=="yes" { print $1 }' <(tail -n+2 $SAMPLEFILE)))
@@ -183,27 +182,31 @@ if [ $doSnp -eq 1 ];then
         i=0
         while [ ! "$sample" == "${allsamples[$i]}" ]; do
             ((i++))
-            [ $i -gt ${#allsamples[@]} ] && { echo "Sample $sample is not present in any sample from "$SNPDIR"/variants.vcf.gz, \
-                                                you should check the BAM @RG field"; samplepresent=0; break; }
+            [ $i -gt ${#allsamples[@]} ] && { 
+                echo "Sample $sample is not present in any sample from "$SNPDIR"/variants.vcf.gz,"\
+                " you should check the BAM @RG field"
+                samplepresent=0
+                break; }
         done
         [ $samplepresent -eq 1 ] && indices+=($((i+1)))
     done
     cut -f 1-9,$(echo ${indices[@]} | sed 's/ /,/g') <(gunzip -c "$SNPDIR"/variants.vcf.gz) | gzip -c > "$SNPDIR"/variants-filtered.vcf.gz
     
-    altlist=("0.8" "0.8" "0.6" "0.51")
-    reflist=("0.2" "0.02" "0.4" "0.05")
-    for ((i=0;i<$#{altlist[@]};i++));do
-        alt=${altlist[$i]}
-        ref=${reflist[$i]}
-        mkdir -p "$SNPDIR"/alt${alt}ref${ref}
+    echo "Filtering SNPs and INDELs with varif"
+    altreflist=("0.8-0.2" "0.8-0.02" "0.6-0.4" "0.51-0.05")
 
-        $VARIF -vcf <(gunzip -c "$SNPDIR"/variants-filtered.vcf.gz) -gff "$GFF" -fasta "$GENOME" \
-        --best-variants --all-regions --no-show --depth 5  \
-        --ratio-alt ${alt} --ratio-no-alt ${ref} \
-        --filtered-csv "$SNPDIR"/alt${alt}ref${ref}/filtered-SNPs-sINDELs.csv \
-        --filtered-vcf "$SNPDIR"/alt${alt}ref${ref}/filtered-SNPs-sINDELs.vcf
-    done
-
+    echo ${altreflist[@]} | \
+        xargs -d ' ' -n1 -P $((threadspersample*samplesperrun)) bash -c \
+            'alt=$(echo $5 | cut -f1 -d"-"); ref=$(echo $5 | cut -f2 -d"-");\
+            echo "Launching varif with ALT:REF of $5";\
+            $1 -vcf <(gunzip -c "$2"/../variants-filtered.vcf.gz) -gff "$3" -fasta "$4" \
+                --best-variants --all-regions --no-show --depth 5  \
+                --ratio-alt ${alt} --ratio-no-alt ${ref} \
+                --filtered-csv "$2"/filtered-SNPs-sINDELs-alt${alt}ref${ref}.csv \
+                --filtered-vcf "$2"/filtered-SNPs-sINDELs-alt${alt}ref${ref}.vcf' \
+        bash "$VARIF" "$SNPDIR"/varif_output/ "$GFF" "$GENOME"
+    wait
+    
     echo "Done the SNPs/INDELs step!"
 fi
 ########

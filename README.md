@@ -90,6 +90,8 @@ cp config/samples-template.sh $DATADIR/samples.sh
 
 Each line corresponds to a sample with a uniquely identified name and both read file names mentioned in the *pair1* and *pair2* fields (the directory where the reads are located is mentioned in the `config` file). The *group* field should contain samples annotated as control or tumor. The *keep* field is used to tell the pipeline to process samples annotated as yes and exclude those annotated as no.
 
+After the launch of the pipeline, the remaining samples to be processed (*keep* field set to *yes*) will be saved in a file whose name is identical to the file provided in the config file, with a *.run* extension prepended to the original extension.
+
 ### Run
 
 Now that you have your own config file and your samples file, you can run the pipeline (Filtering step) using the command
@@ -113,8 +115,8 @@ The available commands are printed with the *-h* option:
         c) # Launch CNV step.
         o) # Launch other variants step.
         k) # Use this configuration file
-        t) # Launch this number of processes in parallel
-        u) # Launch this number of processes for each sample
+        n) # Process this number of samples in parallel
+        u) # Launch this number of processes per sample
         h | *) # Show help.
 ```
 
@@ -160,11 +162,11 @@ By default, `mapper-caller.sh` will run the steps on all samples found in the re
 
 This step is first launched with the script `mapper-caller.sh` which can optionally run the variant calling (-*v*) step on each sample:
 
-This option uses [GATK](https://gatk.broadinstitute.org/hc/en-us) HaplotypeCaller (tested with GATK v 4.2.0) on mapped reads to obtain a GVCF file for each sample. The ploidy used by the model must be properly set in the `config` file and is by default equal to 1.
+This option uses [GATK](https://gatk.broadinstitute.org/hc/en-us) HaplotypeCaller (tested with GATK v 4.2.0) on mapped reads to obtain a GVCF file for each sample. The ploidy used by the model must be properly set in the `config` file and is by default equal to 1. Because this step can be time consuming, the GVCF files produced by the pipeline can be transferred from the temporary folder (`_tmp/gvcf.xxxxxx`) to the GVCFDIR folder from the config file. That way, whenever the pipeline detects that a sample has already a GVCF file present in the GVCFDIR, this step will not be launched.
 
 After the [variant calling](#mappvari)  for each sample has finished, GATK CombineGVCFs will be used to merge all the GVCF and the final variants will be extracted using GATK GenotypeGVCFs.
 
-Then [varif](https://github.com/marcguery/varif) will be used to filter variants based on read depths and ALT allele frequency. A variant is considered available in a sample only if the total read depth is above 5. The ALT allele frequency of the available samples must comprise a value of at least 0.8 in one sample and a value of at most 0.2 in any other sample.
+Then [varif](https://github.com/marcguery/varif) will be used to filter variants based on read depths and ALT allele frequency. A variant is considered available in a sample only if the total read depth is above 5. Several combinations of ALT and REF allele frequencies are used to filter variants. For example, the ALT allele frequency of at least one sample must be superior to 0.8 while being in the meantime inferior to 0.2 in at least one other sample (`--ratio-alt 0.8 --ratio-no-alt 0.2`).
 
 ### <a name="varicnvs"></a>CNVs
 
@@ -182,23 +184,28 @@ To find other variants such as big INDELs, duplication, translocation and invers
 
 ## Other options
 
-### Multithreading
+### Multi-threading
 
-You can choose to parallelize the processes to speed up the time required to obtain results. There are two option controlling this: -*t* for allocating a total number of threads and -*u* for allocating a number of threads for each sample.
-For example with 8 samples to process, -*t* 16 -*u* 2 will process at the same time all the 8 samples with 2 threads for each of them.
-With 8 samples again, -*t* 16 -*u* 4 will process 4 samples at the same time with 4 threads for each of them.
+You can choose to parallelize the processes to speed up the time required to obtain results. There are two option controlling this: -*n* for choosing the number of samples to run in parallel and -*u* for allocating a number of threads for each sample.
+For example with 8 samples to process, -*n* 8 -*u* 2 will process at the same time all the 8 samples with 2 threads for each of them. 
 
-There are specific combinations of the -*t* and -*u* at each step to minimize the processing time (with N being the number of samples):
+There are optimal combinations of the -*n* and -*u* at each step to minimize the processing time; with N being equal to `min(number of samples, number of available CPUs)`:
 
-- Filtering step:  ```-t N*4 -u 4``` 
-- Mapping: ```-t N*4 -u 4``` 
-- All variant filtering steps: ```-t N -u 1``` 
+- Filtering step:  ```-n N -u 4``` 
+- Mapping: ```-n N -u 4``` 
+- All variant filtering steps: ```-n N -u 1``` 
+
+Note that some third-party tools like GATK may require a large amount of RAM which might slow down or even abort a job requesting too much processes to be launched at the same time. In that case you should reduce the number of requested processors or request more memory.
+
+When a step of pipeline is not split by sample (like the 'Other variants' step) the number of allocated processors is the result of `(value of -n * value of -u)`. In the example above (-*n* 8 -*u* 2), this would result in 16 processors used for these steps.
 
 ### Downloading files locating in a SSH server
 
-When raw data and output files are located on a distant server, the variable *REMOTEDATADIR*, *REMOTEADDRESS* and *REMOTEOUTDIR* must be filled. These values correspond to the location of the files on the distant server. *DATADIR* and *OUTDIR* point to the location of the files of the client. The client must have the ability to connect to the server via a SSH key to download the files.
+When raw data and output files are located on a distant server, the variables *REMOTEDATADIR*, *REMOTEADDRESS* and *REMOTEOUTDIR* must be filled. These values correspond to the location of the files on the distant server. *DATADIR* and *OUTDIR* point to the location of the files of the client. **The client must have the ability to connect to the server via a SSH key to download the files**.
 
-The steps of the pipeline will be launched after all the files that exist in the distant server but not locally are downloaded. File modification time is not checked in the process so local files have to be removed to be replaced by those on the distant server.
+The steps of the pipeline will be launched after all the files that exist in the distant server but not locally are downloaded. File modification time is not checked in the process so local files have to be removed to be replaced by those on the distant server. **The only exception to this is the `Samples` file which is always replaced by the remotely located one**.
+
+This automatic downloading can be useful especially when the pipeline is launched via a computing grid (e.g., SGE or slurm) which requires files to be located in a node-specific folder. In that case, the *DATADIR* and *OUTDIR* should be pointing to node-specific folders, while *REMOTEDATADIR* and *REMOTEOUTDIR* should be pointing to data-specific folders.
 
 ## Setup
 
@@ -213,7 +220,7 @@ We tested this pipeline using the programs/inputs described below:
 | [samtools](http://www.htslib.org/doc/samtools.html)          | 1.10                                                         | Produce BAM files           |
 | [bcftools](https://samtools.github.io/bcftools/bcftools.html) | 1.10.2                                                       | Extract DELLY variant files |
 | [GATK](https://gatk.broadinstitute.org/hc/en-us)             | 4.2.0.0                                                      | Getting SNPs/small INDELs   |
-| [varif](https://github.com/marcguery/varif)                  | 0.1.1                                                        | Filtering SNPs/small INDELs |
+| [varif](https://github.com/marcguery/varif)                  | 0.1.2                                                        | Filtering SNPs/small INDELs |
 | [bedtools](https://bedtools.readthedocs.io/en/latest/content/bedtools-suite.html) | 2.26.0                                                       | Filtering CNVs              |
 | [bedGraphToBigWig](https://github.com/ENCODE-DCC/kentUtils)  | 4                                                            | Compressing bed files       |
 | [DELLY](https://github.com/dellytools/delly)                 | 0.8.7                                                        | Filtering other variants    |
