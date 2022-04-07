@@ -1,6 +1,8 @@
 #!/bin/bash
 #Config for pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
+configversion="0.0.1"
+
 ##############################PARAMETERS##############################
 #Fill the TOBEFILLED parts
 
@@ -45,6 +47,7 @@ export BAMEXT=".dd.sorted.bam"
 export VARIANTDIR="$OUTDIR"/variants
 #SNP/small INDEL directory
 export SNPDIR="$VARIANTDIR"/SNPs-sINDELs
+export GVCFDIR="$SNPDIR"/gvcf
 #CNV directory
 export CNVDIR="$VARIANTDIR"/CNVs
 #DELLY directory
@@ -76,6 +79,10 @@ export GATK=gatk
 if [ ! -z "$REMOTEADDRESS" -a $dry -eq 1 ];then
     echo "Copying missing files in $DATADIR from $REMOTEADDRESS:$REMOTEDATADIR"
     mkdir -p "$DATADIR"
+    [ -f $SAMPLEFILE ] && { 
+        oldsamplefilename="$(basename "${SAMPLEFILE%.*}".old."${SAMPLEFILE##*.}")"
+        echo "Moving current SAMPLEFILE to $(dirname $SAMPLEFILE)/$oldsamplefilename"
+        mv $SAMPLEFILE "$(dirname $SAMPLEFILE)/$oldsamplefilename"; }
     ssh "$REMOTEADDRESS" [ -d "$REMOTEDATADIR" ] || \
         { echo "$REMOTEDATADIR does not exist in $REMOTEADDRESS"; exit 1; }
     rsync -a --ignore-existing --progress "$REMOTEADDRESS":"$REMOTEDATADIR"/ "$DATADIR"/

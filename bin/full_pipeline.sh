@@ -1,6 +1,8 @@
 #!/bin/bash
 #Full pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
+binversion="0.0.1"
+
 ##############################OPTIONS##############################
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 declare -i doTes=0
@@ -9,10 +11,10 @@ declare -i doMap=0
 declare -i doSnp=0
 declare -i doCnv=0
 declare -i doOth=0
-declare -i maxthreads=1
-declare -i maxthreadspersample=1
+declare -i samplesperrun=1
+declare -i threadspersample=1
 declare -i dry=0
-while getopts ":bqmscok:t:u:h" o; do
+while getopts ":bqmscok:n:u:h" o; do
     case "${o}" in
         b) # Launch test step.
             doTes=1
@@ -41,11 +43,11 @@ while getopts ":bqmscok:t:u:h" o; do
         k) # Use this configuration file
             configfile="$OPTARG"
             ;;
-        t) # Launch this number of processes in parallel
-            maxthreads=$((OPTARG))
+        n) # Process this number of samples in parallel
+            samplesperrun=$((OPTARG))
             ;;
-        u) # Launch this number of processes for each sample
-            maxthreadspersample=$((OPTARG))
+        u) # Launch this number of processes per sample
+            threadspersample=$((OPTARG))
             ;;
         h | *) # Show help.
             usage
@@ -56,9 +58,15 @@ shift $((OPTIND-1))
 if [[ $SLURM_JOBID =~ ^[0-9]+$ ]] ; then
     LOC=($(echo "$(scontrol show job $SLURM_JOBID | awk -F= '/Command=/{print $2}')"))
     LOC=$(dirname "${LOC[0]}")
+    [ $SLURM_CPUS_ON_NODE -lt $((threadspersample*samplesperrun)) ] && {
+        echo "Requested $((threadspersample*samplesperrun))"\
+        "cores in total but allocated only $SLURM_CPUS_ON_NODE,"\
+        "check your slurm configuration"; exit 1; }
 else
     LOC=$(dirname "$(realpath $0)")
 fi
+
+echo "Discovarif will run with $((threadspersample*samplesperrun)) in total at maximum"
 
 if [ -z "$configfile" -o ! -f "$configfile" ];then
     echo "Selecting the config template file which should only be used for testing"
@@ -68,10 +76,13 @@ fi
 
 source "$configfile"
 
-[ $maxthreadspersample -gt $maxthreads ] && \
-{ echo "Error: Maximum allowed threads of $maxthreads while $maxthreadspersample requested"; exit 1; }
-threadsamples=$(bc <<< $maxthreads/$maxthreadspersample)
-[ $threadsamples -gt $SAMPLENUM ] && { threadsamples=$SAMPLENUM; }
+[ ! "$binversion" == "$configversion" ] && { 
+    echo "Version of the config file ($configversion)"\
+    " does not match the one this pipeline ($binversion)"
+    exit 1
+ }
+
+[ $samplesperrun -gt $SAMPLENUM ] && { samplesperrun=$SAMPLENUM; }
 
 echo "Samples are: ${SAMPLES[@]}"
 ##############################-------##############################
@@ -110,17 +121,9 @@ fi
 if [ $doQua -eq 1 ];then
     echo "Doing the Quality step for each sample..."
 
-    start_index=0
-    sequential_per_process=0
-    iter=0
-    while [ $start_index -le $(($SAMPLENUM-$sequential_per_process)) ];do
-        sequential_per_process=$(bc <<< $(($SAMPLENUM-$start_index))/$(($threadsamples-$iter)))
-        end_index=$(($start_index+$sequential_per_process))
-        echo "New batch: ${SAMPLES[$start_index]} to ${SAMPLES[$(($end_index-1))]}"
-        "$LOC"/../src/mapper-caller.sh -q -s $start_index:$end_index -t $maxthreadspersample &
-        start_index=$end_index
-        ((iter++))
-    done
+    seq -s " " 0 $(($SAMPLENUM-1)) | \
+        xargs -d ' ' -n1 -P $samplesperrun bash -c \
+        "$LOC"'/../src/mapper-caller.sh -q -s $1 -t '$threadspersample bash
     wait
     echo "Done the Quality step!"
 fi
@@ -131,17 +134,9 @@ if [ $doMap -eq 1 ];then
     echo "Doing the Mapping step for each sample..."
     $BWA index "$GENOME"
 
-    start_index=0
-    sequential_per_process=0
-    iter=0
-    while [ $start_index -le $(($SAMPLENUM-$sequential_per_process)) ];do
-        sequential_per_process=$(bc <<< $(($SAMPLENUM-$start_index))/$(($threadsamples-$iter)))
-        end_index=$(($start_index+$sequential_per_process))
-        echo "New batch: ${SAMPLES[$start_index]} to ${SAMPLES[$(($end_index-1))]}"
-        "$LOC"/../src/mapper-caller.sh -m -s $start_index:$end_index -t $maxthreadspersample &
-        start_index=$end_index
-        ((iter++))
-    done
+    seq -s " " 0 $(($SAMPLENUM-1)) | \
+        xargs -d ' ' -n1 -P $samplesperrun bash -c \
+        "$LOC"'/../src/mapper-caller.sh -m -s $1 -t '$threadspersample bash
     wait
     echo "Done the Mapping step!"
 fi
@@ -160,14 +155,9 @@ if [ $doSnp -eq 1 ];then
     export TMPGVCF=$(mktemp -d "$SNPDIR"/_tmp-gvcf.XXXXXX)
     trap "rm -rf $TMPGVCF" 0 2 3 15
 
-    while [ $start_index -le $(($SAMPLENUM-$sequential_per_process)) ];do
-        sequential_per_process=$(bc <<< $(($SAMPLENUM-$start_index))/$(($threadsamples-$iter)))
-        end_index=$(($start_index+$sequential_per_process))
-        echo "New batch: ${SAMPLES[$start_index]} to ${SAMPLES[$(($end_index-1))]}"
-        "$LOC"/../src/mapper-caller.sh -v -s $start_index:$end_index -t $maxthreadspersample &
-        start_index=$end_index
-        ((iter++))
-    done
+    seq -s " " 0 $(($SAMPLENUM-1)) | \
+        xargs -d ' ' -n1 -P $samplesperrun bash -c \
+        "$LOC"'/../src/mapper-caller.sh -v -s $1 -t '$threadspersample bash
     wait
     echo "Done the variant step for each sample!"
 
@@ -200,31 +190,19 @@ if [ $doSnp -eq 1 ];then
     done
     cut -f 1-9,$(echo ${indices[@]} | sed 's/ /,/g') <(gunzip -c "$SNPDIR"/variants.vcf.gz) | gzip -c > "$SNPDIR"/variants-filtered.vcf.gz
     
-    mkdir -p "$SNPDIR"/alt08ref02
-    $VARIF -vcf <(gunzip -c "$SNPDIR"/variants-filtered.vcf.gz) -gff "$GFF" -fasta "$GENOME" \
-    --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.8 \
-    --ratio-no-alt 0.2 --csv "$SNPDIR"/alt08ref02/filtered-SNPs-sINDELs-0802.csv \
-    --filteredvcf "$SNPDIR"/alt08ref02/filtered-SNPs-sINDELs-0802.vcf
+    altlist=("0.8" "0.8" "0.6" "0.51")
+    reflist=("0.2" "0.02" "0.4" "0.05")
+    for ((i=0;i<$#{altlist[@]};i++));do
+        alt=${altlist[$i]}
+        ref=${reflist[$i]}
+        mkdir -p "$SNPDIR"/alt${alt}ref${ref}
 
-    ##Filtering variants
-    #In renamed vcf files, sample names replace file paths
-    mkdir -p "$SNPDIR"/alt06ref04
-    $VARIF -vcf <(gunzip -c "$SNPDIR"/variants-filtered.vcf.gz) -gff "$GFF" -fasta "$GENOME" \
-    --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.6 \
-    --ratio-no-alt 0.4 --csv "$SNPDIR"/alt06ref04/filtered-SNPs-sINDELs-0604.csv \
-    --filteredvcf "$SNPDIR"/alt06ref04/filtered-SNPs-sINDELs-0604.vcf
-
-    mkdir -p "$SNPDIR"/alt05ref005
-    $VARIF -vcf <(gunzip -c "$SNPDIR"/variants-filtered.vcf.gz) -gff "$GFF" -fasta "$GENOME" \
-    --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.55555 \
-    --ratio-no-alt 0.05 --csv "$SNPDIR"/alt05ref005/filtered-SNPs-sINDELs-05005.csv \
-    --filteredvcf "$SNPDIR"/alt05ref005/filtered-SNPs-sINDELs-05005.vcf
-
-    mkdir -p "$SNPDIR"/alt08ref002
-    $VARIF -vcf <(gunzip -c "$SNPDIR"/variants-filtered.vcf.gz) -gff "$GFF" -fasta "$GENOME" \
-    --best-variants --all-regions --no-show --depth 6 --ratio-alt 0.8 \
-    --ratio-no-alt 0.02 --csv "$SNPDIR"/alt08ref002/filtered-SNPs-sINDELs-08002-best.csv \
-    --filteredvcf "$SNPDIR"/alt08ref002/filtered-SNPs-sINDELs-08002-best.vcf
+        $VARIF -vcf <(gunzip -c "$SNPDIR"/variants-filtered.vcf.gz) -gff "$GFF" -fasta "$GENOME" \
+        --best-variants --all-regions --no-show --depth 5  \
+        --ratio-alt ${alt} --ratio-no-alt ${ref} \
+        --filtered-csv "$SNPDIR"/alt${alt}ref${ref}/filtered-SNPs-sINDELs.csv \
+        --filtered-vcf "$SNPDIR"/alt${alt}ref${ref}/filtered-SNPs-sINDELs.vcf
+    done
 
     echo "Done the SNPs/INDELs step!"
 fi
@@ -251,17 +229,9 @@ if [ $doCnv -eq 1 ];then
     $BEDTOOLS genomecov -g "$CNVDIR"/chrom.sizes -i "$CNVDIR"/view/cds.bed -dz | cut -f1,2 > "$CNVDIR"/view/cds-perbase.bed
     
     ##Obtaining cov files
-    start_index=0
-    sequential_per_process=0
-    iter=0
-    while [ $start_index -le $(($SAMPLENUM-$sequential_per_process)) ];do
-        sequential_per_process=$(bc <<< $(($SAMPLENUM-$start_index))/$(($threadsamples-$iter)))
-        end_index=$(($start_index+$sequential_per_process))
-        echo "New batch: ${SAMPLES[$start_index]} to ${SAMPLES[$(($end_index-1))]}"
-        "$LOC"/../src/get-coverage.sh -s $start_index:$end_index &
-        start_index=$end_index
-        ((iter++))
-    done
+    seq -s " " 0 $(($SAMPLENUM-1)) | \
+        xargs -d ' ' -n1 -P $samplesperrun bash -c \
+        "$LOC"'/../src/get-coverage.sh -s $1' bash
     wait
     
     ##Getting filtered CNVs
@@ -286,7 +256,7 @@ if [ $doOth -eq 1 ];then
     TUMORSAMPLES=($(tail -n+2 $SAMPLEFILE | awk '$4!="control" { print $1 }'))
     TUMORBAMFILES=($(echo "$(printf $BAMBAIDIR/'%s'$BAMEXT'\n' "${TUMORSAMPLES[@]}")"))
 
-    "$LOC"/../src/DELLY-caller.sh -t $maxthreads -g $GENOME -b "$OUTDIR"/delly-samples.tsv \
+    "$LOC"/../src/DELLY-caller.sh -t $((threadspersample*samplesperrun)) -g $GENOME -b "$OUTDIR"/delly-samples.tsv \
         -s "$(echo ${TUMORBAMFILES[@]})" \
         -c "$(echo ${CONTROLBAMFILES[@]})"
     echo "Done the Other variants step!"

@@ -17,12 +17,11 @@ BAMFILES=($(echo "$(printf $BAMBAIDIR/'%s'$BAMEXT'\n' "${SAMPLES[@]}")"))
 ##############################OPTIONS##############################
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 declare -i startSample=0
-declare -i endSample=$SAMPLENUM
 declare -i doQual=0
 declare -i doMapp=0
 declare -i doVari=0
 declare -i threads=1
-while getopts ":qmvht:s:" o; do
+while getopts ":qmvhs:e:t:" o; do
     case "${o}" in
         q) # Launch quality step.
             doQual=1
@@ -33,9 +32,11 @@ while getopts ":qmvht:s:" o; do
         v) # Launch variant calling step (SNP/INDELs)
             doVari=1
             ;;
-        s) # Indexes of the samples to process.
-            startSample=$(cut -d":" -f1 <(echo "${OPTARG}"))
-            endSample=$(cut -d":" -f2 <(echo "${OPTARG}"))
+        s) # Index of the first sample to process.
+            startSample=$((OPTARG))
+            ;;
+        e) # Index of the last sample to process.
+            endSample=$((OPTARG))
             ;;
         t) # Launch this number of processes in parallel
             threads=$((OPTARG))
@@ -46,14 +47,15 @@ while getopts ":qmvht:s:" o; do
     esac
 done
 shift $((OPTIND-1))
+[ -z $endSample ] && { endSample=$(($startSample+1)); }
 [ $startSample -ge $endSample -o $endSample -gt $SAMPLENUM ] \
 && { 
-    echo "The indices provided do not match the $SAMPLENUM samples";
-    echo "Indices should be between 0 and $SAMPLENUM, \
-like 0:$SAMPLENUM or 1:$(($SAMPLENUM-1))";
+    echo "The indices $startSample:$endSample  provided do not match the $SAMPLENUM samples."\
+    " Indices should be between 0 and $SAMPLENUM,"\
+    " like 0:$SAMPLENUM or 1:$(($SAMPLENUM-1))"
     exit 1; }
 
-echo "Variant calling with sample indices $startSample to $endSample"
+echo "Processing sample indices $startSample to $(($endSample-1))"
 ##############################-------##############################
 
 ##############################PIPELINE##############################
@@ -154,7 +156,12 @@ if [ $doVari -eq 1 ];then
         bamdedupl="$samplename"$BAMEXT
         gatkbam="$samplename".gatk.bam
         gvcf="$samplename".g.vcf.gz
-        
+
+        [ -f $GVCFDIR/$gvcf ] && {
+            echo "Copying $GVCFDIR/$gvcf to $TMPGVCF/$gvcf..."
+            cp "$GVCFDIR/$gvcf" "$TMPGVCF/$gvcf"
+            continue
+        }
         $GATK HaplotypeCaller \
             -R $GENOME \
             -I "$BAMBAIDIR/$bamdedupl" \
