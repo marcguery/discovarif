@@ -1,7 +1,8 @@
 #!/bin/bash
 #Full pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
-binversion="0.0.2"
+binversion="0.0.3"
+binrealversion="0.0.3"
 
 ##############################OPTIONS##############################
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
@@ -55,6 +56,8 @@ while getopts ":bqmscok:n:u:h" o; do
     esac
 done
 shift $((OPTIND-1))
+
+#######Find the paths to discovarif scripts#######
 if [[ $SLURM_JOBID =~ ^[0-9]+$ ]] ; then
     LOC=($(echo "$(scontrol show job $SLURM_JOBID | awk -F= '/Command=/{print $2}')"))
     LOC=$(dirname "${LOC[0]}")
@@ -65,9 +68,9 @@ if [[ $SLURM_JOBID =~ ^[0-9]+$ ]] ; then
 else
     LOC=$(dirname "$(realpath $0)")
 fi
+##############
 
-echo "Discovarif will run with $((threadspersample*samplesperrun)) in total at maximum"
-
+#######Run the config file
 if [ -z "$configfile" -o ! -f "$configfile" ];then
     echo "Selecting the config template file which should only be used for testing"
     echo "Use -k option to provide your own config file"
@@ -81,8 +84,35 @@ source "$configfile"
     " does not match the one this pipeline ($binversion)"
     exit 1
  }
+##############
+
+#######Copy files if required by config
+if [ ! -z "$REMOTEADDRESS" -a $dry -eq 1 ];then
+    "$LOC"/../src/remotecopy.sh
+fi
+##############
+
+#######Check integrity
+[ ! -f $SAMPLEFILE ] && { echo "Sample file $SAMPLEFILE does not exist"; SAMPLENUM=0; exit 1; }
+newsamplefilename="$(basename "${SAMPLEFILE%.*}".run."${SAMPLEFILE##*.}")"
+head -n1 $SAMPLEFILE > "$(dirname $SAMPLEFILE)/$newsamplefilename"
+tail -n+2 $SAMPLEFILE | awk '$5=="yes" { print $0 }' $SAMPLEFILE >> "$(dirname $SAMPLEFILE)/$newsamplefilename"
+export SAMPLEFILE="$(dirname $SAMPLEFILE)/$newsamplefilename"
+
+SAMPLES=($(cut -f1 $SAMPLEFILE | tail -n+2))
+#Number of samples
+export SAMPLENUM=$(($(cut -f1 $SAMPLEFILE | tail -n+2 | sort | uniq | wc -l)))
+
+[ ! $SAMPLENUM -eq ${#SAMPLES[@]} ] &&
+{ echo "Found $SAMPLENUM uniquely identified samples but expected ${#SAMPLES[@]}"; \
+echo "The sorted samples with their number of occurences (should all be unique):"; \
+echo "$(cut -f1 $SAMPLEFILE | tail -n+2 | sort | uniq -c)"; exit 1; }
+
+##############
 
 [ $samplesperrun -gt $SAMPLENUM ] && { samplesperrun=$SAMPLENUM; }
+
+echo "Discovarif will run with $((threadspersample*samplesperrun)) threads in total at maximum"
 
 echo "Samples are: ${SAMPLES[@]}"
 ##############################-------##############################

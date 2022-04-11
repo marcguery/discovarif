@@ -1,19 +1,21 @@
 #!/bin/bash
 #Config for pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
-configversion="0.0.2"
-configrealversion="0.0.2"
+configversion="0.0.3"
+configrealversion="0.0.3"
 
 ##############################PARAMETERS##############################
-#Fill the TOBEFILLED parts
+#Fill the TOBEFILLED parts from the rawdata files
+#Customize the paths to your liking as
+# long as all rawdata and output are in the same directory
 
 ##RAWDATA##
 #Path for all rawdata
 export DATADIR=TOBEFILLED #Absolute path to the input folder
-REMOTEDATADIR= #Absolute path to a remote data directory. 
+export REMOTEDATADIR= #Absolute path to a remote data directory. 
                                 # Requires a SSH key between the local and remote machines.
                                 # Fill this variable if your files are located on a server.
-REMOTEADDRESS= # Address of the remote machine hosting the files.
+export REMOTEADDRESS= # Address of the remote machine hosting the files.
                         # Fill this variable if your files are located on a server.
 #Fasta file
 export GENOME="$DATADIR"/TOBEFILLED #Absolute path to fasta reference genome file
@@ -32,7 +34,7 @@ export CLIPS="$DATADIR"/TOBEFILLED
 #Path for all output
 export OUTDIR=TOBEFILLED #Absolute path to the output folder
 
-REMOTEOUTDIR= #Absolute path to a remote output directory. 
+export REMOTEOUTDIR= #Absolute path to a remote output directory. 
                                 # Requires a SSH key between the local and remote machines
                                 # Fill this variable if your files are located on a server.
 
@@ -57,7 +59,7 @@ export DELLYDIR="$VARIANTDIR"/Others
 ##############################----------##############################
 
 ##############################UTILS##############################
-# Provide the path to all executables and config files
+# Provide the path to all executables
 
 export FASTQC=fastqc
 export TRIMMOMATIC=TrimmomaticPE
@@ -72,47 +74,3 @@ export PICARD=PicardCommandLine
 export GATK=gatk
 
 ##############################-----##############################
-
-##############################SERVER##############################
-#This script will copy your files from a distant server to your current session
-# if they are missing from your current session and if you provided a remote address
-
-if [ ! -z "$REMOTEADDRESS" -a $dry -eq 1 ];then
-    echo "Copying missing files in $DATADIR from $REMOTEADDRESS:$REMOTEDATADIR"
-    mkdir -p "$DATADIR"
-    [ -f $SAMPLEFILE ] && { 
-        oldsamplefilename="$(basename "${SAMPLEFILE%.*}".old."${SAMPLEFILE##*.}")"
-        echo "Moving current SAMPLEFILE to $(dirname $SAMPLEFILE)/$oldsamplefilename"
-        mv $SAMPLEFILE "$(dirname $SAMPLEFILE)/$oldsamplefilename"; }
-    ssh "$REMOTEADDRESS" [ -d "$REMOTEDATADIR" ] || \
-        { echo "$REMOTEDATADIR does not exist in $REMOTEADDRESS"; exit 1; }
-    rsync -a --ignore-existing --progress "$REMOTEADDRESS":"$REMOTEDATADIR"/ "$DATADIR"/
-
-    echo "Copying missing files in $OUTDIR from $REMOTEADDRESS:$REMOTEOUTDIR"
-    mkdir -p "$OUTDIR"
-    ssh "$REMOTEADDRESS" [ -d "$REMOTEOUTDIR" ] && \
-    { rsync -a --ignore-existing --progress "$REMOTEADDRESS":"$REMOTEOUTDIR"/ "$OUTDIR"/; } || \
-    { echo "$REMOTEOUTDIR does not exist in $REMOTEADDRESS"; }
-    
-fi
-
-##############################----------##############################
-
-##############################CHECK##############################
-
-[ ! -f $SAMPLEFILE ] && { echo "Sample file $SAMPLEFILE does not exist"; SAMPLENUM=0; return 0; }
-newsamplefilename="$(basename "${SAMPLEFILE%.*}".run."${SAMPLEFILE##*.}")"
-head -n1 $SAMPLEFILE > "$(dirname $SAMPLEFILE)/$newsamplefilename"
-tail -n+2 $SAMPLEFILE | awk '$5=="yes" { print $0 }' $SAMPLEFILE >> "$(dirname $SAMPLEFILE)/$newsamplefilename"
-export SAMPLEFILE="$(dirname $SAMPLEFILE)/$newsamplefilename"
-
-SAMPLES=($(cut -f1 $SAMPLEFILE | tail -n+2))
-#Number of samples
-export SAMPLENUM=$(($(cut -f1 $SAMPLEFILE | tail -n+2 | sort | uniq | wc -l)))
-
-[ ! $SAMPLENUM -eq ${#SAMPLES[@]} ] &&
-{ echo "Found $SAMPLENUM uniquely identified samples but expected ${#SAMPLES[@]}"; \
-echo "The sorted samples with their number of occurences (should all be unique):"; \
-echo "$(cut -f1 $SAMPLEFILE | tail -n+2 | sort | uniq -c)"; exit 1; }
-
-##############################----------##############################
