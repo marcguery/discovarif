@@ -159,7 +159,12 @@ if [ $doVari -eq 1 ];then
 
         [ -f $GVCFDIR/$gvcf ] && {
             echo "Copying $GVCFDIR/$gvcf to $TMPGVCF/$gvcf..."
-            cp "$GVCFDIR/$gvcf" "$TMPGVCF/$gvcf"
+            if [ -f "$GVCFDIR/$gvcf.tbi" ];then
+                cp "$GVCFDIR/$gvcf" "$TMPGVCF/$gvcf"
+                cp "$GVCFDIR/$gvcf.tbi" "$TMPGVCF/$gvcf.tbi"
+            else
+                echo "Missing index file for sample $samplename"
+            fi
             continue
         }
         $GATK HaplotypeCaller \

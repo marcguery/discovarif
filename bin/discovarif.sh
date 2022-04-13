@@ -93,7 +93,7 @@ fi
 ##############
 
 #######Check integrity
-[ ! -f $SAMPLEFILE ] && { echo "Sample file $SAMPLEFILE does not exist"; SAMPLENUM=0; exit 1; }
+[ ! -f "$SAMPLEFILE" ] && { echo "Sample file $SAMPLEFILE does not exist"; SAMPLENUM=0; exit 1; }
 newsamplefilename="$(basename "${SAMPLEFILE%.*}".run."${SAMPLEFILE##*.}")"
 head -n1 $SAMPLEFILE > "$(dirname $SAMPLEFILE)/$newsamplefilename"
 tail -n+2 $SAMPLEFILE | awk '$5=="yes" { print $0 }' $SAMPLEFILE >> "$(dirname $SAMPLEFILE)/$newsamplefilename"
