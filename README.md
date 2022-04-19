@@ -88,7 +88,7 @@ A template is provided in the `config` folder. This file should be located in th
 cp config/samples-template.sh $DATADIR/samples.sh
 ```
 
-Each line corresponds to a sample with a uniquely identified name and both read file names mentioned in the *pair1* and *pair2* fields (the directory where the reads are located is mentioned in the `config` file). The *group* field should contain samples annotated as control or tumor. The *keep* field is used to tell the pipeline to process samples annotated as yes and exclude those annotated as no.
+Each line corresponds to a sample with a uniquely identified name and both read file names mentioned in the *pair1* and *pair2* fields (the directory where the reads are located is mentioned in the `config` file). The *group* field should contain an integer equal to 0 to characterize a control sample or superior to 0 to characterize a regular group of samples. The *keep* field is used to tell the pipeline to process samples annotated as yes and exclude those annotated as no.
 
 After the launch of the pipeline, the remaining samples to be processed (*keep* field set to *yes*) will be saved in a file whose name is identical to the file provided in the config file, with a *.run* extension prepended to the original extension.
 
@@ -166,7 +166,8 @@ This option uses [GATK](https://gatk.broadinstitute.org/hc/en-us) HaplotypeCalle
 
 After the [variant calling](#mappvari)  for each sample has finished, GATK CombineGVCFs will be used to merge all the GVCF and the final variants will be extracted using GATK GenotypeGVCFs.
 
-Then [varif](https://github.com/marcguery/varif) will be used to filter variants based on read depths and ALT allele frequency. A variant is considered available in a sample only if the total read depth is above 5. Several combinations of ALT and REF allele frequencies are used to filter variants. For example, the ALT allele frequency of at least one sample must be superior to 0.8 while being in the meantime inferior to 0.2 in at least one other sample (`--ratio-alt 0.8 --ratio-no-alt 0.2`).
+Then [varif](https://github.com/marcguery/varif) will be used to filter variants based on read depths and ALT allele frequency. A variant is considered available in a sample only if the total read depth is above 5. Several combinations of ALT and REF allele frequencies are used to filter variants for each group as mentioned in the samples file. For example, the ALT allele frequency of at least one sample must be superior to 0.8 while being in the meantime inferior to 0.2 in at least one other sample (`--ratio-alt 0.8 --ratio-no-alt 0.2`).
+Each  group will be individually filtered by varif with the control group (when a control group is provided in the samples file with samples whose *group* field is equal to 0) or without it.
 
 ### <a name="varicnvs"></a>CNVs
 
@@ -220,7 +221,7 @@ We tested this pipeline using the programs/inputs described below:
 | [samtools](http://www.htslib.org/doc/samtools.html)          | 1.10                                                         | Produce BAM files           |
 | [bcftools](https://samtools.github.io/bcftools/bcftools.html) | 1.10.2                                                       | Extract DELLY variant files |
 | [GATK](https://gatk.broadinstitute.org/hc/en-us)             | 4.2.0.0                                                      | Getting SNPs/small INDELs   |
-| [varif](https://github.com/marcguery/varif)                  | 0.1.2                                                        | Filtering SNPs/small INDELs |
+| [varif](https://github.com/marcguery/varif)                  | 0.1.4                                                        | Filtering SNPs/small INDELs |
 | [bedtools](https://bedtools.readthedocs.io/en/latest/content/bedtools-suite.html) | 2.26.0                                                       | Filtering CNVs              |
 | [bedGraphToBigWig](https://github.com/ENCODE-DCC/kentUtils)  | 4                                                            | Compressing bed files       |
 | [DELLY](https://github.com/dellytools/delly)                 | 0.8.7                                                        | Filtering other variants    |
