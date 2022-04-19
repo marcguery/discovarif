@@ -2,7 +2,7 @@
 #Full pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
 binversion="0.0.3"
-binrealversion="0.0.3"
+binrealversion="0.0.4"
 
 ##############################OPTIONS##############################
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
@@ -108,6 +108,9 @@ export SAMPLENUM=$(($(cut -f1 $SAMPLEFILE | tail -n+2 | sort | uniq | wc -l)))
 echo "The sorted samples with their number of occurences (should all be unique):"; \
 echo "$(cut -f1 $SAMPLEFILE | tail -n+2 | sort | uniq -c)"; exit 1; }
 
+#Groups
+Groups=($(cut -f4 $SAMPLEFILE | tail -n+2 | sort | uniq))
+
 ##############
 
 [ $samplesperrun -gt $SAMPLENUM ] && { samplesperrun=$SAMPLENUM; }
@@ -204,36 +207,62 @@ if [ $doSnp -eq 1 ];then
     echo "SNP/INDEL calling terminated"
 
     echo "Extracting good quality samples (keep=yes) from the file $SAMPLEFILE..."
-    goodsamples=($(awk '$5=="yes" { print $1 }' <(tail -n+2 $SAMPLEFILE)))
-    allsamples=($(grep -m 1 "#CHROM" <(gunzip -c "$SNPDIR"/variants.vcf.gz)))
-    indices=()
-    for sample in ${goodsamples[@]}; do
+    goodsamples=($(awk '$5=="yes" { print $1 }' <(tail -n+2 $SAMPLEFILE |  sort -k4 -n)))
+    goodsamplesgroups=($(awk '$5=="yes" { print $4 }' <(tail -n+2 $SAMPLEFILE |  sort -k4 -n)))
+    allsamples=($(grep -m 1 "#CHROM" <(gunzip -c "$SNPDIR"/variants.vcf.gz) | cut -f10-))
+    goodindices=()
+    group=
+    controlindices=()
+    for ((i=0;i<${#goodsamples[@]};i++));do
+        sample=${goodsamples[$i]}
+        samplegroup=${goodsamplesgroups[$i]}
         samplepresent=1
-        i=0
-        while [ ! "$sample" == "${allsamples[$i]}" ]; do
-            ((i++))
-            [ $i -gt ${#allsamples[@]} ] && { 
+        indexvcf=0
+        while [ ! "$sample" == "${allsamples[$indexvcf]}" ]; do
+            ((indexvcf++))
+            [ $indexvcf -gt ${#allsamples[@]} ] && { 
                 echo "Sample $sample is not present in any sample from "$SNPDIR"/variants.vcf.gz,"\
                 " you should check the BAM @RG field"
                 samplepresent=0
                 break; }
         done
-        [ $samplepresent -eq 1 ] && indices+=($((i+1)))
+        [ $samplepresent -eq 1 ] && {
+            if [ ! -z "$group" -a "$group" != "$samplegroup" ];then
+                [ "$group" == "0" ] && {
+                    echo "Found control group 0 at columns ${goodindices[@]} of "$SNPDIR"/variants.vcf.gz"
+                    controlindices=("${goodindices[@]}")
+                }
+                goodindices+=(${controlindices[@]})
+                echo "Group $group will be constitued by columns $(echo "${goodindices[@]}" | sed 's/ /,/g') of "$SNPDIR"/variants.vcf.gz"
+                cut -f 1-9,$(echo "${goodindices[@]}" | sed 's/ /,/g') <(gunzip -c "$SNPDIR"/variants.vcf.gz) | gzip -c > "$SNPDIR"/variants-filtered-$group.vcf.gz
+                goodindices=()
+            fi
+            goodindices+=($((indexvcf+10)))
+            group=$samplegroup
+        }
     done
-    cut -f 1-9,$(echo ${indices[@]} | sed 's/ /,/g') <(gunzip -c "$SNPDIR"/variants.vcf.gz) | gzip -c > "$SNPDIR"/variants-filtered.vcf.gz
+    goodindices+=(${controlindices[@]})
+    echo "Group $group will be constitued by columns $(echo "${goodindices[@]}" | sed 's/ /,/g') of "$SNPDIR"/variants.vcf.gz"
+    cut -f 1-9,$(echo "${goodindices[@]}" | sed 's/ /,/g') <(gunzip -c "$SNPDIR"/variants.vcf.gz) | gzip -c > "$SNPDIR"/variants-filtered-$group.vcf.gz
     
     echo "Filtering SNPs and INDELs with varif"
     altreflist=("0.8-0.2" "0.8-0.02" "0.6-0.4" "0.51-0.05")
+    altrefgrouplist=()
+    for altref in ${altreflist[@]};do
+        altrefgrouplist+=($(echo "$(printf "$altref:"'%s\n' "${Groups[@]}")"))
+    done
 
-    echo ${altreflist[@]} | \
+    echo ${altrefgrouplist[@]} | \
         xargs -d ' ' -n1 -P $((threadspersample*samplesperrun)) bash -c \
-            'alt=$(echo $5 | cut -f1 -d"-"); ref=$(echo $5 | cut -f2 -d"-");\
-            echo "Launching varif with ALT:REF of $5";\
-            $1 -vcf <(gunzip -c "$2"/../variants-filtered.vcf.gz) -gff "$3" -fasta "$4" \
+            'alt=$(echo $5 | cut -f1 -d":" | cut -f1 -d"-"); \
+            ref=$(echo $5 | cut -f1 -d":" | cut -f2 -d"-"); \
+            group=$(echo $5 | cut -f2 -d":");\
+            echo "Launching varif with ALT:REF of $alt:$ref on group $group";\
+            $1 -vcf <(gunzip -c "$2"/../variants-filtered-${group}.vcf.gz) -gff "$3" -fasta "$4" \
                 --best-variants --all-regions --no-show --depth 5  \
                 --ratio-alt ${alt} --ratio-no-alt ${ref} \
-                --filtered-csv "$2"/filtered-SNPs-sINDELs-alt${alt}ref${ref}.csv \
-                --filtered-vcf "$2"/filtered-SNPs-sINDELs-alt${alt}ref${ref}.vcf' \
+                --filtered-csv "$2"/filtered-SNPs-sINDELs-group${group}alt${alt}ref${ref}.csv \
+                --filtered-vcf "$2"/filtered-SNPs-sINDELs-group${group}alt${alt}ref${ref}.vcf' \
         bash "$VARIF" "$SNPDIR"/varif_output/ "$GFF" "$GENOME"
     wait
     
@@ -284,9 +313,9 @@ if [ $doOth -eq 1 ];then
     echo "Doing the Other variants step..."
     mkdir -p "$DELLYDIR"
     cut -f1,4 $SAMPLEFILE | tail -n+2 > "$OUTDIR"/delly-samples.tsv
-    CONTROLSAMPLES=($(tail -n+2 $SAMPLEFILE | awk '$4=="control" { print $1 }' $SAMPLEFILE))
+    CONTROLSAMPLES=($(tail -n+2 $SAMPLEFILE | awk '$4=="0" { print $1 }' $SAMPLEFILE))
     CONTROLBAMFILES=($(echo "$(printf $BAMBAIDIR/'%s'$BAMEXT'\n' "${CONTROLSAMPLES[@]}")"))
-    TUMORSAMPLES=($(tail -n+2 $SAMPLEFILE | awk '$4!="control" { print $1 }'))
+    TUMORSAMPLES=($(tail -n+2 $SAMPLEFILE | awk '$4!="0" { print $1 }'))
     TUMORBAMFILES=($(echo "$(printf $BAMBAIDIR/'%s'$BAMEXT'\n' "${TUMORSAMPLES[@]}")"))
 
     "$LOC"/../src/DELLY-caller.sh -t $((threadspersample*samplesperrun)) -g $GENOME -b "$OUTDIR"/delly-samples.tsv \

@@ -1,4 +1,5 @@
 sample	pair1	pair2	group	keep
-S1	S1_R1.fastq.gz	S1_R2.fastq.gz	tumor	yes
-S2	S2_R1.fastq.gz	S2_R2.fastq.gz	control	yes
-S3	S3_R1.fastq.gz	S3_R2.fastq.gz	tumor	no
+S1	S1_R1.fastq.gz	S1_R2.fastq.gz	1	yes
+S2	S2_R1.fastq.gz	S2_R2.fastq.gz	0	yes
+S3	S3_R1.fastq.gz	S3_R2.fastq.gz	1	no
+S4	S4_R1.fastq.gz	S4_R2.fastq.gz	2	yes
