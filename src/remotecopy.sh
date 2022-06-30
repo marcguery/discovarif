@@ -12,10 +12,10 @@ mkdir -p "$DATADIR"
     mv $SAMPLEFILE "$(dirname $SAMPLEFILE)/$oldsamplefilename"; }
 ssh "$REMOTEADDRESS" [ -d "$REMOTEDATADIR" ] || \
     { echo "$REMOTEDATADIR does not exist in $REMOTEADDRESS"; exit 1; }
-rsync -a --ignore-existing --progress "$REMOTEADDRESS":"$REMOTEDATADIR"/ "$DATADIR"/
+rsync -L -a --ignore-existing --progress "$REMOTEADDRESS":"$REMOTEDATADIR"/ "$DATADIR"/
 
 echo "Copying missing files in $OUTDIR from $REMOTEADDRESS:$REMOTEOUTDIR"
 mkdir -p "$OUTDIR"
 ssh "$REMOTEADDRESS" [ -d "$REMOTEOUTDIR" ] || \
     { echo "$REMOTEOUTDIR does not exist in $REMOTEADDRESS "; exit 1; }
-rsync -a --ignore-existing --progress "$REMOTEADDRESS":"$REMOTEOUTDIR"/ "$OUTDIR"/
+rsync -L -a --ignore-existing --progress "$REMOTEADDRESS":"$REMOTEOUTDIR"/ "$OUTDIR"/
