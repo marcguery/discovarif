@@ -1,8 +1,8 @@
 #!/bin/bash
 #Full pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
-binversion="0.0.3"
-binrealversion="0.0.5"
+binversion="0.0.4"
+binrealversion="0.0.6"
 
 ##############################OPTIONS##############################
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
@@ -259,10 +259,10 @@ if [ $doSnp -eq 1 ];then
             group=$(echo $5 | cut -f2 -d":");\
             echo "Launching varif with ALT:REF of $alt:$ref on group $group";\
             $1 -vcf <(gunzip -c "$2"/../variants-filtered-${group}.vcf.gz) -gff "$3" -fasta "$4" \
-                --best-variants --all-regions --no-show --depth 5  \
+                -outfilename "$2"/filtered-SNPs-sINDELs-group${group}alt${alt}ref${ref} \
+                --best-variants --all-regions --depth 5  \
                 --ratio-alt ${alt} --ratio-no-alt ${ref} \
-                --filtered-csv "$2"/filtered-SNPs-sINDELs-group${group}alt${alt}ref${ref}.csv \
-                --filtered-vcf "$2"/filtered-SNPs-sINDELs-group${group}alt${alt}ref${ref}.vcf' \
+                --output-vcf' \
         bash "$VARIF" "$SNPDIR"/varif_output/ "$GFF" "$GENOME"
     wait
     

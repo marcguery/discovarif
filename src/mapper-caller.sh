@@ -171,7 +171,6 @@ if [ $doVari -eq 1 ];then
             -R $GENOME \
             -I "$BAMBAIDIR/$bamdedupl" \
             -O "$TMPGVCF/$gvcf" \
-            --pcr-indel-model NONE \
             -ERC GVCF \
             --sample-ploidy $(($PLOIDY)) \
             -bamout "$BAMBAIDIR/$gatkbam"
