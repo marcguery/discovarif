@@ -221,7 +221,7 @@ We tested this pipeline using the programs/inputs described below:
 | [samtools](http://www.htslib.org/doc/samtools.html)          | 1.10                                                         | Produce BAM files           |
 | [bcftools](https://samtools.github.io/bcftools/bcftools.html) | 1.10.2                                                       | Extract DELLY variant files |
 | [GATK](https://gatk.broadinstitute.org/hc/en-us)             | 4.2.0.0                                                      | Getting SNPs/small INDELs   |
-| [varif](https://github.com/marcguery/varif)                  | 0.1.4                                                        | Filtering SNPs/small INDELs |
+| [varif](https://github.com/marcguery/varif)                  | 0.3.2                                                        | Filtering SNPs/small INDELs |
 | [bedtools](https://bedtools.readthedocs.io/en/latest/content/bedtools-suite.html) | 2.26.0                                                       | Filtering CNVs              |
 | [bedGraphToBigWig](https://github.com/ENCODE-DCC/kentUtils)  | 4                                                            | Compressing bed files       |
 | [DELLY](https://github.com/dellytools/delly)                 | 0.8.7                                                        | Filtering other variants    |

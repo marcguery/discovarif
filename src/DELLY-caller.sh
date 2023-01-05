@@ -1,17 +1,16 @@
 #!/bin/bash
 #Discover DELLY variants (Wed 30 Sep 18:20:21 CEST 2020)
 DELLY="${DELLY:-delly}"
-BCFTOOLS="${BCFTOOLS:-bcftools}"
 DELLYDIR="${DELLYDIR:-.}"
 ###############################OPTIONS###############################
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 declare -i maxthreads=1
 declare -i minsize=0
 altaf=0.5
-ratiogeno=0.3
+ratiogeno=0
 declare -i coverage=10
-controlcontamination=2
-while getopts ":s:c:b:g:t:m:a:r:v:d:" o; do
+controlcontamination=1
+while getopts ":s:c:b:g:u:t:m:a:r:v:d:" o; do
     case "${o}" in
         s) # Files to analyse (required)
             samples="$OPTARG"
@@ -24,6 +23,9 @@ while getopts ":s:c:b:g:t:m:a:r:v:d:" o; do
             ;;
         g) # Genome in a fasta format (required)
             genome="$OPTARG"
+            ;;
+        u) # Type of structural variant (required)
+            variant="$OPTARG"
             ;;
         t) # Number of threads delly will use
             maxthreads=$((OPTARG))
@@ -52,7 +54,6 @@ shift $((OPTIND-1))
 #####################################################################
 
 ##############################PARAMETERS##############################
-VARIANTS=("DEL" "DUP" "INS" "INV" "BND")
 export OMP_NUM_THREADS=$maxthreads
 CTRL=( $controls )
 TUMOR=( $samples )
@@ -72,30 +73,21 @@ done
 
 ##############################PIPELINE##############################
 
-echo "Running DELLY with $OMP_NUM_THREADS threads"
+echo "Running DELLY ($variant) with $OMP_NUM_THREADS threads"
 echo "Set ${CTRL[@]} as controls"
 echo "Dealing with ${TUMOR[@]}..."
 
-echo "Variant calling..."
-for variant in ${VARIANTS[@]};do
-    if [ ! -f "$DELLYDIR"/delly-$variant.bcf ];then
-        echo "Doing $variant call..."
-        $DELLY call -t $variant -g "$genome" "${TUMOR[@]}" "${CTRL[@]}" \
-           -o "$DELLYDIR"/delly-$variant.bcf
-    fi
-    if [ ! -f "$DELLYDIR"/delly-$variant-filter.bcf ];then
-        echo "Doing variant filtering..."
-        $DELLY filter -p -f somatic -m $minsize -a $altaf -r $ratiogeno -v $coverage -c $controlcontamination \
-            "$DELLYDIR"/delly-$variant.bcf -s $dellysamples \
-            -o "$DELLYDIR"/delly-$variant-filter.bcf
-        [ ! -f "$DELLYDIR"/delly-$variant-filter.bcf ] && touch "$DELLYDIR"/delly-$variant-filter.bcf
-    fi
-done
-
-    echo "Merging files..."
-    $BCFTOOLS view $(ls -1 "$DELLYDIR"/*-filter.bcf | head -n1) | grep "#" > "$DELLYDIR"/delly-final.vcf
-    for f in $(ls -1 "$DELLYDIR"/*-filter.bcf);do
-        $BCFTOOLS view "$f" | grep -v "#" >> "$DELLYDIR"/delly-final.vcf
-    done
+if [ ! -f "$DELLYDIR"/delly-$variant.bcf ];then
+    echo "Doing $variant call..."
+    $DELLY call -t "$variant" -g "$genome" "${TUMOR[@]}" "${CTRL[@]}" \
+        -o "$DELLYDIR"/delly-$variant.bcf
+fi
+if [ ! -f "$DELLYDIR"/delly-$variant-filter.bcf ];then
+    echo "Doing variant filtering..."
+    $DELLY filter -p -f somatic -m $minsize -a $altaf -r $ratiogeno -v $coverage -c $controlcontamination \
+        "$DELLYDIR"/delly-$variant.bcf -s $dellysamples \
+        -o "$DELLYDIR"/delly-$variant-filter.bcf
+    [ ! -f "$DELLYDIR"/delly-$variant-filter.bcf ] && touch "$DELLYDIR"/delly-$variant-filter.bcf
+fi
 
 ##############################--------##############################

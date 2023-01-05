@@ -252,7 +252,7 @@ if [ $doSnp -eq 1 ];then
         altrefgrouplist+=($(echo "$(printf "$altref:"'%s\n' "${Groups[@]}")"))
     done
 
-    echo ${altrefgrouplist[@]} | \
+    echo "${altrefgrouplist[@]}" | \
         xargs -d ' ' -n1 -P $((threadspersample*samplesperrun)) bash -c \
             'alt=$(echo $5 | cut -f1 -d":" | cut -f1 -d"-"); \
             ref=$(echo $5 | cut -f1 -d":" | cut -f2 -d"-"); \
@@ -317,10 +317,24 @@ if [ $doOth -eq 1 ];then
     CONTROLBAMFILES=($(echo "$(printf $BAMBAIDIR/'%s'$BAMEXT'\n' "${CONTROLSAMPLES[@]}")"))
     TUMORSAMPLES=($(tail -n+2 $SAMPLEFILE | awk '$4!="0" { print $1 }'))
     TUMORBAMFILES=($(echo "$(printf $BAMBAIDIR/'%s'$BAMEXT'\n' "${TUMORSAMPLES[@]}")"))
+    VARIANTS=("DEL" "DUP" "INS" "INV" "BND")
+    dellythreads=$(((threadspersample*samplesperrun)/${#VARIANTS[@]}))
+    if [ $dellythreads -leq 0 ];then
+        dellythreads=1
+    fi
 
-    "$LOC"/../src/DELLY-caller.sh -t $((threadspersample*samplesperrun)) -g $GENOME -b "$OUTDIR"/delly-samples.tsv \
-        -s "$(echo ${TUMORBAMFILES[@]})" \
-        -c "$(echo ${CONTROLBAMFILES[@]})"
+    echo "${VARIANTS[@]}" | \
+        xargs -d ' ' -n1 -P $((threadspersample*samplesperrun)) bash -c \
+            '$1 -t "$2" -g "$3" -b "$4" -s "$5" -c "$6" -u "$7" ' \
+        bash "$LOC/../src/DELLY-caller.sh" $dellythreads "$GENOME" "$OUTDIR/delly-samples.tsv" "$(echo ${TUMORBAMFILES[@]})" "$(echo ${CONTROLBAMFILES[@]})"
+    wait
+    
+    echo "Merging files..."
+    $BCFTOOLS view $(ls -1 "$DELLYDIR"/*-filter.bcf | head -n1) | grep "#" > "$DELLYDIR"/delly-final.vcf
+    for f in $(ls -1 "$DELLYDIR"/*-filter.bcf);do
+        $BCFTOOLS view "$f" | grep -v "#" >> "$DELLYDIR"/delly-final.vcf
+    done
+
     echo "Done the Other variants step!"
 fi
 ########
