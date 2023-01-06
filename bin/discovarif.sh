@@ -312,21 +312,22 @@ fi
 if [ $doOth -eq 1 ];then
     echo "Doing the Other variants step..."
     mkdir -p "$DELLYDIR"
-    cut -f1,4 $SAMPLEFILE | tail -n+2 > "$OUTDIR"/delly-samples.tsv
+    dellysamples=$(mktemp delly-samples.XXXXXX.tsv)
+    awk '{if ($4==0) ($4 = "control"); else ($4 = "tumor"); print ($1,$4)}' $SAMPLEFILE | tail -n+2 > "$OUTDIR/${dellysamples}"
     CONTROLSAMPLES=($(tail -n+2 $SAMPLEFILE | awk '$4=="0" { print $1 }' $SAMPLEFILE))
     CONTROLBAMFILES=($(echo "$(printf $BAMBAIDIR/'%s'$BAMEXT'\n' "${CONTROLSAMPLES[@]}")"))
     TUMORSAMPLES=($(tail -n+2 $SAMPLEFILE | awk '$4!="0" { print $1 }'))
     TUMORBAMFILES=($(echo "$(printf $BAMBAIDIR/'%s'$BAMEXT'\n' "${TUMORSAMPLES[@]}")"))
     VARIANTS=("DEL" "DUP" "INS" "INV" "BND")
     dellythreads=$(((threadspersample*samplesperrun)/${#VARIANTS[@]}))
-    if [ $dellythreads -leq 0 ];then
+    if [ $dellythreads -le 0 ];then
         dellythreads=1
     fi
 
-    echo "${VARIANTS[@]}" | \
+    echo -n "${VARIANTS[@]}" | \
         xargs -d ' ' -n1 -P $((threadspersample*samplesperrun)) bash -c \
             '$1 -t "$2" -g "$3" -b "$4" -s "$5" -c "$6" -u "$7" ' \
-        bash "$LOC/../src/DELLY-caller.sh" $dellythreads "$GENOME" "$OUTDIR/delly-samples.tsv" "$(echo ${TUMORBAMFILES[@]})" "$(echo ${CONTROLBAMFILES[@]})"
+        bash "$LOC/../src/DELLY-caller.sh" $dellythreads "$GENOME" "$OUTDIR/${dellysamples}" "$(echo ${TUMORBAMFILES[@]})" "$(echo ${CONTROLBAMFILES[@]})"
     wait
     
     echo "Merging files..."

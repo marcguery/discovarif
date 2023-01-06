@@ -224,7 +224,7 @@ We tested this pipeline using the programs/inputs described below:
 | [varif](https://github.com/marcguery/varif)                  | 0.3.2                                                        | Filtering SNPs/small INDELs |
 | [bedtools](https://bedtools.readthedocs.io/en/latest/content/bedtools-suite.html) | 2.26.0                                                       | Filtering CNVs              |
 | [bedGraphToBigWig](https://github.com/ENCODE-DCC/kentUtils)  | 4                                                            | Compressing bed files       |
-| [DELLY](https://github.com/dellytools/delly)                 | 0.8.7                                                        | Filtering other variants    |
+| [DELLY](https://github.com/dellytools/delly)                 | 1.1.6                                                        | Filtering other variants    |
 | 3D7 genome                                                   | 46                                                           | Reference genome            |
 | Core annotation                                              | [2016](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5052046/) | Subseting CNVs              |
 | Resistant samples                                            |                                                              | Variant discovery           |
