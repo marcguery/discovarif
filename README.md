@@ -220,6 +220,7 @@ We tested this pipeline using the programs/inputs described below:
 | [picard](https://broadinstitute.github.io/picard/)           | 2.18.25                                                      | Removing duplicated reads   |
 | [samtools](http://www.htslib.org/doc/samtools.html)          | 1.10                                                         | Produce BAM files           |
 | [bcftools](https://samtools.github.io/bcftools/bcftools.html) | 1.10.2                                                       | Extract DELLY variant files |
+| [alfred](https://github.com/tobiasrausch/alfred)             | 0.2.6                                                        | Mapping statistics          |
 | [GATK](https://gatk.broadinstitute.org/hc/en-us)             | 4.2.0.0                                                      | Getting SNPs/small INDELs   |
 | [varif](https://github.com/marcguery/varif)                  | 0.3.2                                                        | Filtering SNPs/small INDELs |
 | [bedtools](https://bedtools.readthedocs.io/en/latest/content/bedtools-suite.html) | 2.26.0                                                       | Filtering CNVs              |

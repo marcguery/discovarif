@@ -1,12 +1,12 @@
 #!/bin/bash
 #Full pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
-binversion="0.0.4"
-binrealversion="0.0.6"
+binversion="0.0.5"
+binrealversion="0.0.7"
 
 ##############################OPTIONS##############################
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
-declare -i doTes=0
+declare -i doTes=1
 declare -i doQua=0
 declare -i doMap=0
 declare -i doSnp=0
@@ -127,9 +127,9 @@ if [ $doTes -eq 1 ];then
     echo "Testing each tool..."
     tools=("$FASTQC --version" "$TRIMMOMATIC -version" \
     $BWA "$SAMTOOLS --version" \
-    "$BCFTOOLS --version" "$VARIF -h" \
+    "$BCFTOOLS --version" "$VARIF --version" \
     "$BEDTOOLS --version" "$DELLY --version" "$BEDGRAPHTOBIGWIG" \
-    "$PICARD" "$GATK --version")
+    "$PICARD" "$GATK --version" "$ALFRED --version")
 
     for ((i=0;i<${#tools[@]};i++));do
         ${tools[$i]} &> /dev/null
@@ -146,7 +146,6 @@ if [ $doTes -eq 1 ];then
     [ -d $READDIR ] || echo "The folder READDIR does not exist"
     [ -f $CLIPS ] || echo "The file CLIPS does not exist"
     [ -d $OUTDIR ] || echo "The folder OUTDIR does not exist"
-    exit 0
 fi
 ########
 

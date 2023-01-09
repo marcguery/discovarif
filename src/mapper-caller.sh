@@ -138,6 +138,9 @@ if [ $doMapp -eq 1 ];then
         ##Indexing sorted deduplicated BAM
         $SAMTOOLS index -@ $(($threads-1)) "$BAMBAIDIR/$bamdedupl"
 
+        $ALFRED qc -r "$GENOME" -j "$BAMBAIDIR/metrics/${samplename}-qc.json.gz" \
+            -o "$BAMBAIDIR/metrics/${samplename}-qc.tsv.gz" "$BAMBAIDIR/$bamdedupl"
+
         ##Removing tmp files
         [ -f "$BAMBAIDIR/$bamdedupl".bai ] && \
             rm "$BAMBAIDIR/tmp/sam/$sam" "$BAMBAIDIR/tmp/$bam" "$BAMBAIDIR/tmp/$bamsorted" || \

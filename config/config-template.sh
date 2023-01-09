@@ -1,8 +1,8 @@
 #!/bin/bash
 #Config for pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
-configversion="0.0.4"
-configrealversion="0.0.3"
+configversion="0.0.5"
+configrealversion="0.0.4"
 
 ##############################PARAMETERS##############################
 #Fill the TOBEFILLED parts from the rawdata files
@@ -66,6 +66,7 @@ export TRIMMOMATIC=TrimmomaticPE
 export BWA=bwa
 export SAMTOOLS=samtools
 export BCFTOOLS=bcftools
+export ALFRED=alfred
 export VARIF=varif
 export BEDTOOLS=bedtools
 export DELLY=delly
