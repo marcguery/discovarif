@@ -180,6 +180,7 @@ if [ $doSnp -eq 1 ];then
     mkdir -p "$SNPDIR"
     mkdir -p "$SNPDIR"/_tmp/
     mkdir -p "$SNPDIR"/varif_output/
+    mkdir -p "$GVCFDIR"
 
     $GATK CreateSequenceDictionary -R $GENOME
 
@@ -195,7 +196,7 @@ if [ $doSnp -eq 1 ];then
 
     $GATK CombineGVCFs \
         -R $GENOME \
-        --variant $(sed -e 's/ / --variant /g' <(echo $TMPGVCF/*.g.vcf.gz)) \
+        --variant $(sed -e 's/ / --variant /g' <(echo $GVCFDIR/*.g.vcf.gz)) \
         -O $SNPDIR/cohort.g.vcf.gz
 
     $GATK --java-options "-Xmx4g" GenotypeGVCFs \

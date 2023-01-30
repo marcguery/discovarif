@@ -50,6 +50,7 @@ export BAMEXT=".dd.sorted.bam"
 export VARIANTDIR="$OUTDIR"/variants
 #SNP/small INDEL directory
 export SNPDIR="$VARIANTDIR"/SNPs-sINDELs
+#GATK's GVCFs that were successfully created
 export GVCFDIR="$SNPDIR"/gvcf
 #CNV directory
 export CNVDIR="$VARIANTDIR"/CNVs

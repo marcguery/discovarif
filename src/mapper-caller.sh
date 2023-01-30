@@ -160,16 +160,11 @@ if [ $doVari -eq 1 ];then
         gatkbam="$samplename".gatk.bam
         gvcf="$samplename".g.vcf.gz
 
-        [ -f $GVCFDIR/$gvcf ] && {
-            echo "Copying $GVCFDIR/$gvcf to $TMPGVCF/$gvcf..."
-            if [ -f "$GVCFDIR/$gvcf.tbi" ];then
-                cp "$GVCFDIR/$gvcf" "$TMPGVCF/$gvcf"
-                cp "$GVCFDIR/$gvcf.tbi" "$TMPGVCF/$gvcf.tbi"
-            else
-                echo "Missing index file for sample $samplename"
-            fi
+        if [ -f $GVCFDIR/$gvcf -a -f $GVCFDIR/$gvcf.tbi ];then
+            echo "$GVCFDIR/$gvcf and $GVCFDIR/$gvcf.tbi already exist, skipping variant calling for sample $samplename"
             continue
-        }
+        fi
+
         $GATK HaplotypeCaller \
             -R $GENOME \
             -I "$BAMBAIDIR/$bamdedupl" \
@@ -177,6 +172,14 @@ if [ $doVari -eq 1 ];then
             -ERC GVCF \
             --sample-ploidy $(($PLOIDY)) \
             -bamout "$BAMBAIDIR/$gatkbam"
+
+        if [ -f $TMPGVCF/$gvcf -a -f "$TMPGVCF/$gvcf.tbi" ];then
+            echo "Variant calling complete for sample $samplename, saving in $GVCFDIR"
+            cp "$TMPGVCF/$gvcf" "$GVCFDIR/$gvcf"
+            cp "$TMPGVCF/$gvcf.tbi" "$GVCFDIR/$gvcf.tbi"
+        else
+            echo "Failed to call variants for sample $samplename; missing $TMPGVCF/$gvcf or $TMPGVCF/$gvcf.tbi"
+        fi
     done
 
 fi
