@@ -21,7 +21,8 @@ declare -i doQual=0
 declare -i doMapp=0
 declare -i doVari=0
 declare -i threads=1
-while getopts ":qmvhs:e:t:" o; do
+declare -i memory=1000000000
+while getopts ":qmvhs:e:t:g:" o; do
     case "${o}" in
         q) # Launch quality step.
             doQual=1
@@ -38,8 +39,11 @@ while getopts ":qmvhs:e:t:" o; do
         e) # Index of the last sample to process.
             endSample=$((OPTARG))
             ;;
-        t) # Launch this number of processes in parallel
+        t) # Use this number of threads for each sample
             threads=$((OPTARG))
+            ;;
+        g) # Use this memory for each sample
+            memory=$((OPTARG))
             ;;
         h | *) # Show help.
             usage
@@ -55,6 +59,16 @@ shift $((OPTIND-1))
     " like 0:$SAMPLENUM or 1:$(($SAMPLENUM-1))"
     exit 1; }
 
+bitsToHumanReadable() {
+    local i=${1:-0} s=0 S=("" "K" "M" "G" "T")
+    while ((i > 1000 && s < ${#S[@]}-1)); do
+        i=$((i / 1000))
+        s=$((s + 1))
+    done
+    echo "$i${S[$s]}"
+}
+
+memory_format=$(bitsToHumanReadable $memory)
 echo "Processing sample indices $startSample to $(($endSample-1))"
 ##############################-------##############################
 
@@ -78,7 +92,7 @@ if [ $doQual -eq 1 ];then
         $FASTQC -o "$QUALDIR" -t $threads "$r1" "$r2"
 
         ##Read trimming
-        $TRIMMOMATIC -threads $threads -trimlog "$TRIMDIR/log.txt" "$r1" "$r2" \
+        java -Xmx"$memory_format" -jar $TRIMMOMATIC_jar PE -threads $threads -trimlog "$TRIMDIR/log.txt" "$r1" "$r2" \
         "$TRIMDIR/$r1name".paired.gz "$TRIMDIR/$r1name".unpaired.gz \
         "$TRIMDIR/$r2name".paired.gz "$TRIMDIR/$r2name".unpaired.gz \
         ILLUMINACLIP:$CLIPS:2:30:10 \
@@ -130,7 +144,7 @@ if [ $doMapp -eq 1 ];then
 
         ##Removing duplicates
         bamdedupl="$samplename".dd.sorted.bam
-        $PICARD MarkDuplicates I="$BAMBAIDIR/tmp/$bamsorted" \
+        java -Xmx"$memory_format" -jar $PICARD_jar MarkDuplicates I="$BAMBAIDIR/tmp/$bamsorted" \
             O="$BAMBAIDIR/$bamdedupl" \
             M="$BAMBAIDIR/metrics/$samplename.dd.stats" \
             REMOVE_DUPLICATES=true
@@ -165,7 +179,7 @@ if [ $doVari -eq 1 ];then
             continue
         fi
 
-        $GATK HaplotypeCaller \
+        $GATK --java-options "-Xmx${memory_format}" HaplotypeCaller \
             -R $GENOME \
             -I "$BAMBAIDIR/$bamdedupl" \
             -O "$TMPGVCF/$gvcf" \

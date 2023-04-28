@@ -1,12 +1,12 @@
 #!/bin/bash
 #Full pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
-binversion="0.0.5"
-binrealversion="0.0.7"
+binversion="0.0.6"
+binrealversion="0.0.8"
 
 ##############################OPTIONS##############################
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
-declare -i doTes=1
+declare -i doTes=0
 declare -i doQua=0
 declare -i doMap=0
 declare -i doSnp=0
@@ -14,12 +14,12 @@ declare -i doCnv=0
 declare -i doOth=0
 declare -i samplesperrun=1
 declare -i threadspersample=1
+declare -i tot_memory=4000000000
 declare -i dry=0
-while getopts ":bqmscok:n:u:h" o; do
+while getopts ":bqmscok:n:u:g:h" o; do
     case "${o}" in
         b) # Launch test step.
             doTes=1
-            dry=1
             ;;
         q) # Launch quality step.
             doQua=1
@@ -50,12 +50,27 @@ while getopts ":bqmscok:n:u:h" o; do
         u) # Launch this number of processes per sample
             threadspersample=$((OPTARG))
             ;;
+        g) # Use this much RAM (default 4G)
+            tot_memory=$(($(numfmt --from=si "$OPTARG")))
+            ;; 
         h | *) # Show help.
             usage
             ;;
     esac
 done
 shift $((OPTIND-1))
+
+bitsToHumanReadable() {
+    local i=${1:-0} s=0 S=("" "K" "M" "G" "T")
+    while ((i > 1000 && s < ${#S[@]}-1)); do
+        i=$((i / 1000))
+        s=$((s + 1))
+    done
+    echo "$i${S[$s]}"
+}
+
+[ $tot_memory -gt 1000000000000000 ] && { tot_memory=1000000000000000; }
+tot_memory_format=$(bitsToHumanReadable $tot_memory)
 
 #######Find the paths to discovarif scripts#######
 if [[ $SLURM_JOBID =~ ^[0-9]+$ ]] ; then
@@ -70,13 +85,52 @@ else
 fi
 ##############
 
-#######Run the config file
-if [ -z "$configfile" -o ! -f "$configfile" ];then
-    echo "Selecting the config template file which should only be used for testing"
-    echo "Use -k option to provide your own config file"
-    configfile="$LOC"/../config/config-template.sh
+if [ $dry -eq 1 ];then
+    if [ -z "$configfile" -o ! -f "$configfile" ];then
+        echo "You should provide a config file with -k option and fill it accordingly"
+        echo "Check in config folder for a template"
+        exit 1
+    fi
+    ##############
+
+    #######Copy files if required by config
+    if [ ! -z "$REMOTEADDRESS" ];then
+        "$LOC"/../src/remotecopy.sh
+    fi
+
+    #######Check integrity
+    [ ! -f "$SAMPLEFILE" ] && { echo "Sample file $SAMPLEFILE does not exist"; SAMPLENUM=0; exit 1; }
+    newsamplefilename="$(basename "${SAMPLEFILE%.*}".run."${SAMPLEFILE##*.}")"
+    head -n1 $SAMPLEFILE > "$(dirname $SAMPLEFILE)/$newsamplefilename"
+    tail -n+2 $SAMPLEFILE | awk '$5=="yes" { print $0 }' $SAMPLEFILE >> "$(dirname $SAMPLEFILE)/$newsamplefilename"
+    export SAMPLEFILE="$(dirname $SAMPLEFILE)/$newsamplefilename"
+
+    SAMPLES=($(cut -f1 $SAMPLEFILE | tail -n+2))
+    #Number of samples
+    export SAMPLENUM=$(($(cut -f1 $SAMPLEFILE | tail -n+2 | sort | uniq | wc -l)))
+
+    [ ! $SAMPLENUM -eq ${#SAMPLES[@]} ] &&
+    { echo "Found $SAMPLENUM uniquely identified samples but expected ${#SAMPLES[@]}"; \
+    echo "The sorted samples with their number of occurences (should all be unique):"; \
+    echo "$(cut -f1 $SAMPLEFILE | tail -n+2 | sort | uniq -c)"; exit 1; }
+
+    #Groups
+    Groups=($(cut -f4 $SAMPLEFILE | tail -n+2 | sort | uniq))
+
+    ##############
+
+    [ $samplesperrun -gt $SAMPLENUM ] && { samplesperrun=$SAMPLENUM; }
+    mempersample=$(($tot_memory/$samplesperrun))
+    mempersample_format=$(bitsToHumanReadable $mempersample)
+    echo "Discovarif will run each sample with with $threadspersample threads and $mempersample_format RAM, totalling to \
+    $((threadspersample*samplesperrun)) threads and $tot_memory_format RAM at maximum"
+
+    echo "Samples are: ${SAMPLES[@]}"
+else
+    configfile="config/config-template.sh"
 fi
 
+#######Run the config file
 source "$configfile"
 
 [ ! "$binversion" == "$configversion" ] && { 
@@ -86,66 +140,43 @@ source "$configfile"
  }
 ##############
 
-#######Copy files if required by config
-if [ ! -z "$REMOTEADDRESS" -a $dry -eq 1 ];then
-    "$LOC"/../src/remotecopy.sh
-fi
-##############
 
-#######Check integrity
-[ ! -f "$SAMPLEFILE" ] && { echo "Sample file $SAMPLEFILE does not exist"; SAMPLENUM=0; exit 1; }
-newsamplefilename="$(basename "${SAMPLEFILE%.*}".run."${SAMPLEFILE##*.}")"
-head -n1 $SAMPLEFILE > "$(dirname $SAMPLEFILE)/$newsamplefilename"
-tail -n+2 $SAMPLEFILE | awk '$5=="yes" { print $0 }' $SAMPLEFILE >> "$(dirname $SAMPLEFILE)/$newsamplefilename"
-export SAMPLEFILE="$(dirname $SAMPLEFILE)/$newsamplefilename"
-
-SAMPLES=($(cut -f1 $SAMPLEFILE | tail -n+2))
-#Number of samples
-export SAMPLENUM=$(($(cut -f1 $SAMPLEFILE | tail -n+2 | sort | uniq | wc -l)))
-
-[ ! $SAMPLENUM -eq ${#SAMPLES[@]} ] &&
-{ echo "Found $SAMPLENUM uniquely identified samples but expected ${#SAMPLES[@]}"; \
-echo "The sorted samples with their number of occurences (should all be unique):"; \
-echo "$(cut -f1 $SAMPLEFILE | tail -n+2 | sort | uniq -c)"; exit 1; }
-
-#Groups
-Groups=($(cut -f4 $SAMPLEFILE | tail -n+2 | sort | uniq))
-
-##############
-
-[ $samplesperrun -gt $SAMPLENUM ] && { samplesperrun=$SAMPLENUM; }
-
-echo "Discovarif will run with $((threadspersample*samplesperrun)) threads in total at maximum"
-
-echo "Samples are: ${SAMPLES[@]}"
 ##############################-------##############################
 
 ##############################PIPELINE##############################
 
 ####Test####
 if [ $doTes -eq 1 ];then
+
     echo "Testing each tool..."
-    tools=("$FASTQC --version" "$TRIMMOMATIC -version" \
+    toolok=0
+    tools=("$FASTQC --version" "java -jar $TRIMMOMATIC_jar PE -version" \
     $BWA "$SAMTOOLS --version" \
     "$BCFTOOLS --version" "$VARIF --version" \
     "$BEDTOOLS --version" "$DELLY --version" "$BEDGRAPHTOBIGWIG" \
-    "$PICARD" "$GATK --version" "$ALFRED --version")
+    "java -jar $PICARD_jar" "$GATK --version" "$ALFRED --version")
 
     for ((i=0;i<${#tools[@]};i++));do
         ${tools[$i]} &> /dev/null
-        [ "$?" -eq 127 ] && \
-            { echo "Command ${tools[$i]} not found"; echo "Check the executable path in the config file"; }
+        [ "$?" -eq 127 ] && { toolok=1; \
+                                echo "Command ${tools[$i]} not found"; \
+                                echo "Check the executable path in the config file"; }
     done
+    [ $toolok -eq 0 ] && echo "All tools are successfully installed!"
 
-    echo "Testing raw data files"
-    [ -d $DATADIR ] || echo "The folder DATADIR does not exist"
-    [ -f $GENOME ] || echo "The file GENOME does not exist"
-    [ -f $INFOGENOME ] || echo "The file INFOGENOME does not exist"
-    [ -f $GFF ] || echo "The file GFF does not exist"
-    [ -f $SAMPLEFILE ] || echo "The file SAMPLEFILE does not exist"
-    [ -d $READDIR ] || echo "The folder READDIR does not exist"
-    [ -f $CLIPS ] || echo "The file CLIPS does not exist"
-    [ -d $OUTDIR ] || echo "The folder OUTDIR does not exist"
+    
+    if [ -z "$REMOTEADDRESS" -o ! -z "$REMOTEADDRESS" -a $dry -eq 1 ];then
+        echo "Testing raw data files"s
+        [ -d $DATADIR ] ||      echo "The folder DATADIR ($DATADIR) does not exist"
+        [ -f $GENOME ] ||       echo "The file GENOME ($GENOME) does not exist"
+        [ -f $INFOGENOME ] ||   echo "The file INFOGENOME ($INFOGENOME) does not exist"
+        [ -f $GFF ] ||          echo "The file GFF ($GFF) does not exist"
+        [ -f $SAMPLEFILE ] ||   echo "The file SAMPLEFILE ($SAMPLEFILE) does not exist"
+        [ -d $READDIR ] ||      echo "The folder READDIR ($READDIR) does not exist"
+        [ -f $CLIPS ] ||        echo "The file CLIPS ($CLIPS) does not exist"
+        [ -d $OUTDIR ] ||       echo "The folder OUTDIR ($OUTDIR) does not exist"
+
+    fi
 fi
 ########
 
@@ -190,34 +221,38 @@ if [ $doSnp -eq 1 ];then
 
     seq -s " " 0 $(($SAMPLENUM-1)) | \
         xargs -d ' ' -n1 -P $samplesperrun bash -c \
-        "$LOC"'/../src/mapper-caller.sh -v -s $1 -t '$threadspersample bash
+        "$LOC"'/../src/mapper-caller.sh -v -s $1 -t '$threadspersample' -g '$mempersample bash
     wait
     echo "Done the variant step for each sample!"
 
-    $GATK CombineGVCFs \
+    $GATK --java-options "-Xmx${tot_memory_format}" CombineGVCFs \
         -R $GENOME \
         --variant $(sed -e 's/ / --variant /g' <(echo $GVCFDIR/*.g.vcf.gz)) \
         -O $SNPDIR/cohort.g.vcf.gz
 
-    $GATK --java-options "-Xmx4g" GenotypeGVCFs \
+    $GATK --java-options "-Xmx${tot_memory_format}" GenotypeGVCFs \
         -R $GENOME \
         -V $SNPDIR/cohort.g.vcf.gz \
         -O $SNPDIR/variants.vcf.gz
     
     echo "SNP/INDEL calling terminated"
 
+    #Samples are sorted according to their group identifier (must be numeric)
     echo "Extracting good quality samples (keep=yes) from the file $SAMPLEFILE..."
     goodsamples=($(awk '$5=="yes" { print $1 }' <(tail -n+2 $SAMPLEFILE |  sort -k4 -n)))
     goodsamplesgroups=($(awk '$5=="yes" { print $4 }' <(tail -n+2 $SAMPLEFILE |  sort -k4 -n)))
     allsamples=($(grep -m 1 "#CHROM" <(gunzip -c "$SNPDIR"/variants.vcf.gz) | cut -f10-))
     goodindices=()
+    allgoodindices=()
     group=
     controlindices=()
+    #Extract samples from VCF file according to their groups
     for ((i=0;i<${#goodsamples[@]};i++));do
         sample=${goodsamples[$i]}
         samplegroup=${goodsamplesgroups[$i]}
         samplepresent=1
         indexvcf=0
+        #Iterate over all VCF headers to check if the sample is present
         while [ ! "$sample" == "${allsamples[$indexvcf]}" ]; do
             ((indexvcf++))
             [ $indexvcf -gt ${#allsamples[@]} ] && { 
@@ -227,41 +262,67 @@ if [ $doSnp -eq 1 ];then
                 break; }
         done
         [ $samplepresent -eq 1 ] && {
+            #If group is set and is different from the samplegroup (the current one), ...
             if [ ! -z "$group" -a "$group" != "$samplegroup" ];then
+                #if there is a control group (must be '0') it is the first one
+                # to appear since samples are sorted by their group id
                 [ "$group" == "0" ] && {
                     echo "Found control group 0 at columns ${goodindices[@]} of "$SNPDIR"/variants.vcf.gz"
                     controlindices=("${goodindices[@]}")
                 }
+                #... group samples are extracted with the control samples (if '0' id is present) from the VCF file
                 goodindices+=(${controlindices[@]})
-                echo "Group $group will be constitued by columns $(echo "${goodindices[@]}" | sed 's/ /,/g') of "$SNPDIR"/variants.vcf.gz"
+                echo "Group $group will be constituted by columns $(echo "${goodindices[@]}" | sed 's/ /,/g') of "$SNPDIR"/variants.vcf.gz"
                 cut -f 1-9,$(echo "${goodindices[@]}" | sed 's/ /,/g') <(gunzip -c "$SNPDIR"/variants.vcf.gz) | gzip -c > "$SNPDIR"/variants-filtered-$group.vcf.gz
                 goodindices=()
             fi
             goodindices+=($((indexvcf+10)))
+            allgoodindices+=($((indexvcf+10)))
+            #group is now samplegroup (current group)
             group=$samplegroup
         }
     done
     goodindices+=(${controlindices[@]})
-    echo "Group $group will be constitued by columns $(echo "${goodindices[@]}" | sed 's/ /,/g') of "$SNPDIR"/variants.vcf.gz"
+    echo "Group $group will be constituted by columns $(echo "${goodindices[@]}" | sed 's/ /,/g') of "$SNPDIR"/variants.vcf.gz"
     cut -f 1-9,$(echo "${goodindices[@]}" | sed 's/ /,/g') <(gunzip -c "$SNPDIR"/variants.vcf.gz) | gzip -c > "$SNPDIR"/variants-filtered-$group.vcf.gz
-    
-    echo "Filtering SNPs and INDELs with varif"
-    altreflist=("0.8-0.2" "0.8-0.02" "0.6-0.4" "0.51-0.05")
-    altrefgrouplist=()
-    for altref in ${altreflist[@]};do
-        altrefgrouplist+=($(echo "$(printf "$altref:"'%s\n' "${Groups[@]}")"))
-    done
 
-    echo "${altrefgrouplist[@]}" | \
-        xargs -d ' ' -n1 -P $((threadspersample*samplesperrun)) bash -c \
-            'alt=$(echo $5 | cut -f1 -d":" | cut -f1 -d"-"); \
-            ref=$(echo $5 | cut -f1 -d":" | cut -f2 -d"-"); \
-            group=$(echo $5 | cut -f2 -d":");\
-            echo "Launching varif with ALT:REF of $alt:$ref on group $group";\
-            $1 -vcf <(gunzip -c "$2"/../variants-filtered-${group}.vcf.gz) -gff "$3" -fasta "$4" \
-                -outfilename "$2"/filtered-SNPs-sINDELs-group${group}alt${alt}ref${ref} \
+    allgoodindices+=(${controlindices[@]})
+    echo "All available samples are constituted by columns $(echo "${allgoodindices[@]}" | sed 's/ /,/g') of "$SNPDIR"/variants.vcf.gz"
+    cut -f 1-9,$(echo "${allgoodindices[@]}" | sed 's/ /,/g') <(gunzip -c "$SNPDIR"/variants.vcf.gz) | gzip -c > "$SNPDIR"/variants-filtered.vcf.gz
+
+    echo "Filtering SNPs and INDELs with varif"
+    altreflist=("0.9-0.05" "0.8-0.2" "0.4-0.05")
+    remainingthreads=$(((threadspersample*samplesperrun)-3))
+    if [ $remainingthreads -lt 1 ];then
+        remainingthreads = 1
+    fi    
+
+    varifsamples=$(mktemp varif-samples.XXXXXX.tsv)
+    awk -v OFS=$'\t' '{print ($4,$1,"0","0","other","0")}' $SAMPLEFILE | tail -n+2 > "$OUTDIR/${varifsamples}"
+
+    echo "${altreflist[@]}" | \
+        xargs -d ' ' -n1 -P $(((threadspersample*samplesperrun)-1)) bash -c \
+            'alt=$(echo $6 | cut -f1 -d"-"); \
+            ref=$(echo $6 | cut -f2 -d"-"); \
+            echo "Launching varif with ALT:REF of $alt:$ref";\
+            $1 -vcf <(gunzip -c "$2"/../variants-filtered.vcf.gz) -gff "$3" -fasta "$4" \
+                -outfilename "$2"/filtered-SNPs-sINDELs-alt${alt}-ref${ref} \
+                --ped "$5" --comparison families \
                 --best-variants --all-regions --depth 5  \
-                --ratio-alt ${alt} --ratio-no-alt ${ref} \
+                --ratio-alt ${alt} --ratio-ref ${ref} \
+                --output-vcf' \
+        bash "$VARIF" "$SNPDIR"/varif_output/ "$GFF" "$GENOME" "$OUTDIR/${varifsamples}" &
+    
+    echo "${altreflist[@]}" | \
+        xargs -d ' ' -n1 -P $((remainingthreads)) bash -c \
+            'alt=$(echo $5 | cut -f1 -d"-"); \
+            ref=$(echo $5 | cut -f2 -d"-"); \
+            echo "Launching varif with ALT:REF of $alt:$ref";\
+            $1 -vcf <(gunzip -c "$2"/../variants-filtered.vcf.gz) -gff "$3" -fasta "$4" \
+                -outfilename "$2"/filtered-SNPs-sINDELs-alt${alt}-ref${ref} \
+                --comparison all \
+                --best-variants --all-regions --depth 5  \
+                --ratio-alt ${alt} --ratio-ref ${ref} \
                 --output-vcf' \
         bash "$VARIF" "$SNPDIR"/varif_output/ "$GFF" "$GENOME"
     wait

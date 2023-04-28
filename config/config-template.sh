@@ -1,13 +1,12 @@
 #!/bin/bash
 #Config for pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
-configversion="0.0.5"
-configrealversion="0.0.4"
+configversion="0.0.6"
+configrealversion="0.0.5"
 
 ##############################PARAMETERS##############################
-#Fill the TOBEFILLED parts from the rawdata files
-#Customize the paths to your liking as
-# long as all rawdata and output are in the same directory
+#Fill the TOBEFILLED parts 
+# and optionally the IFAVAILABLE parts
 
 ##RAWDATA##
 #Path for all rawdata
@@ -20,7 +19,7 @@ export REMOTEADDRESS= # Address of the remote machine hosting the files.
 #Fasta file
 export GENOME="$DATADIR"/TOBEFILLED #Absolute path to fasta reference genome file
 export PLOIDY=1 #Ploidy of the genome
-export INFOGENOME="$DATADIR"/TOBEFILLED #Absolute path to tabulated file with core annotations of the genome 
+export INFOGENOME="$DATADIR"/IFAVAILABLE #Absolute path to tabulated file with core annotations of the genome 
                                                #(see Miles 2016 for Plasmodium: 10.1101/gr.203711.115)
 export GFF="$DATADIR"/TOBEFILLED #Absolute path to gff features file
 
@@ -63,7 +62,6 @@ export DELLYDIR="$VARIANTDIR"/Others
 # Provide the path to all executables
 
 export FASTQC=fastqc
-export TRIMMOMATIC=TrimmomaticPE
 export BWA=bwa
 export SAMTOOLS=samtools
 export BCFTOOLS=bcftools
@@ -72,7 +70,10 @@ export VARIF=varif
 export BEDTOOLS=bedtools
 export DELLY=delly
 export BEDGRAPHTOBIGWIG=bedGraphToBigWig
-export PICARD=PicardCommandLine
 export GATK=gatk
+
+# Provide the path to all JAR files
+export TRIMMOMATIC_jar=/usr/share/java/trimmomatic.jar
+export PICARD_jar=/usr/share/java/picard.jar
 
 ##############################-----##############################
