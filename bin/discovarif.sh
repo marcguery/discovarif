@@ -2,7 +2,7 @@
 #Full pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
 binversion="0.0.6"
-binrealversion="0.0.8"
+binrealversion="0.0.9"
 
 ##############################OPTIONS##############################
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
@@ -90,7 +90,16 @@ if [ $dry -eq 1 ];then
         echo "You should provide a config file with -k option and fill it accordingly"
         echo "Check in config folder for a template"
         exit 1
-    fi
+    fi 
+
+    #######Run the config file
+    source "$configfile"
+
+    [ ! "$binversion" == "$configversion" ] && { 
+        echo "Version of the config file ($configversion)"\
+        " does not match the one this pipeline ($binversion)"
+        exit 1
+    }
     ##############
 
     #######Copy files if required by config
@@ -126,19 +135,7 @@ if [ $dry -eq 1 ];then
     $((threadspersample*samplesperrun)) threads and $tot_memory_format RAM at maximum"
 
     echo "Samples are: ${SAMPLES[@]}"
-else
-    configfile="config/config-template.sh"
 fi
-
-#######Run the config file
-source "$configfile"
-
-[ ! "$binversion" == "$configversion" ] && { 
-    echo "Version of the config file ($configversion)"\
-    " does not match the one this pipeline ($binversion)"
-    exit 1
- }
-##############
 
 
 ##############################-------##############################
@@ -166,7 +163,7 @@ if [ $doTes -eq 1 ];then
 
     
     if [ -z "$REMOTEADDRESS" -o ! -z "$REMOTEADDRESS" -a $dry -eq 1 ];then
-        echo "Testing raw data files"s
+        echo "Testing raw data files"
         [ -d $DATADIR ] ||      echo "The folder DATADIR ($DATADIR) does not exist"
         [ -f $GENOME ] ||       echo "The file GENOME ($GENOME) does not exist"
         [ -f $INFOGENOME ] ||   echo "The file INFOGENOME ($INFOGENOME) does not exist"
@@ -186,7 +183,7 @@ if [ $doQua -eq 1 ];then
 
     seq -s " " 0 $(($SAMPLENUM-1)) | \
         xargs -d ' ' -n1 -P $samplesperrun bash -c \
-        "$LOC"'/../src/mapper-caller.sh -q -s $1 -t '$threadspersample bash
+        "$LOC"'/../src/mapper-caller.sh -q -s $1 -t '$threadspersample' -g '$mempersample bash
     wait
     echo "Done the Quality step!"
 fi
@@ -199,7 +196,7 @@ if [ $doMap -eq 1 ];then
 
     seq -s " " 0 $(($SAMPLENUM-1)) | \
         xargs -d ' ' -n1 -P $samplesperrun bash -c \
-        "$LOC"'/../src/mapper-caller.sh -m -s $1 -t '$threadspersample bash
+        "$LOC"'/../src/mapper-caller.sh -m -s $1 -t '$threadspersample' -g '$mempersample bash
     wait
     echo "Done the Mapping step!"
 fi
@@ -373,25 +370,32 @@ fi
 if [ $doOth -eq 1 ];then
     echo "Doing the Other variants step..."
     mkdir -p "$DELLYDIR"
-    dellysamples=$(mktemp delly-samples.XXXXXX.tsv)
-    awk '{if ($4==0) ($4 = "control"); else ($4 = "tumor"); print ($1,$4)}' $SAMPLEFILE | tail -n+2 > "$OUTDIR/${dellysamples}"
+    dellysamples=$(mktemp "$OUTDIR/"delly-samples.XXXXXX.tsv)
+    awk '{if ($4==0) ($4 = "control"); else ($4 = "tumor"); print ($1,$4)}' $SAMPLEFILE | tail -n+2 > "${dellysamples}"
     CONTROLSAMPLES=($(tail -n+2 $SAMPLEFILE | awk '$4=="0" { print $1 }' $SAMPLEFILE))
     CONTROLBAMFILES=($(echo "$(printf $BAMBAIDIR/'%s'$BAMEXT'\n' "${CONTROLSAMPLES[@]}")"))
     TUMORSAMPLES=($(tail -n+2 $SAMPLEFILE | awk '$4!="0" { print $1 }'))
     TUMORBAMFILES=($(echo "$(printf $BAMBAIDIR/'%s'$BAMEXT'\n' "${TUMORSAMPLES[@]}")"))
     VARIANTS=("DEL" "DUP" "INS" "INV" "BND")
-    dellythreads=$(((threadspersample*samplesperrun)/${#VARIANTS[@]}))
-    if [ $dellythreads -le 0 ];then
-        dellythreads=1
+    if [ $samplesperrun -gt ${#VARIANTS[@]} ];then
+        dellythreads=$(((threadspersample*samplesperrun)/${#VARIANTS[@]}))
+    else
+        dellythreads=$threadspersample
     fi
 
     echo -n "${VARIANTS[@]}" | \
-        xargs -d ' ' -n1 -P $((threadspersample*samplesperrun)) bash -c \
+        xargs -d ' ' -n1 -P $samplesperrun bash -c \
             '$1 -t "$2" -g "$3" -b "$4" -s "$5" -c "$6" -u "$7" ' \
-        bash "$LOC/../src/DELLY-caller.sh" $dellythreads "$GENOME" "$OUTDIR/${dellysamples}" "$(echo ${TUMORBAMFILES[@]})" "$(echo ${CONTROLBAMFILES[@]})"
+        bash "$LOC/../src/DELLY-caller.sh" $dellythreads "$GENOME" "${dellysamples}" "$(echo ${TUMORBAMFILES[@]})" "$(echo ${CONTROLBAMFILES[@]})"
     wait
     
     echo "Merging files..."
+    compgen -G "$DELLYDIR"/*-filter.bcf > /dev/null
+    returnerr=$?
+    if [ ! $returnerr -eq 0 ];then
+        echo "Cannot merge filtered files from DELLY"
+        exit $returnerr
+    fi
     $BCFTOOLS view $(ls -1 "$DELLYDIR"/*-filter.bcf | head -n1) | grep "#" > "$DELLYDIR"/delly-final.vcf
     for f in $(ls -1 "$DELLYDIR"/*-filter.bcf);do
         $BCFTOOLS view "$f" | grep -v "#" >> "$DELLYDIR"/delly-final.vcf

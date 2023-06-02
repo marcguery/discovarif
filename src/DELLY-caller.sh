@@ -87,7 +87,6 @@ if [ ! -f "$DELLYDIR"/delly-$variant-filter.bcf ];then
     $DELLY filter -p -f somatic -m $minsize -a $altaf -r $ratiogeno -v $coverage -c $controlcontamination \
         "$DELLYDIR"/delly-$variant.bcf -s $dellysamples \
         -o "$DELLYDIR"/delly-$variant-filter.bcf
-    [ ! -f "$DELLYDIR"/delly-$variant-filter.bcf ] && touch "$DELLYDIR"/delly-$variant-filter.bcf
 fi
 
 ##############################--------##############################
