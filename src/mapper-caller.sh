@@ -143,7 +143,7 @@ if [ $doMapp -eq 1 ];then
         $SAMTOOLS sort -@ $(($threads-1)) "$BAMBAIDIR/tmp/$bam" -o "$BAMBAIDIR/tmp/$bamsorted"
 
         ##Removing duplicates
-        bamdedupl="$samplename".dd.sorted.bam
+        bamdedupl="$samplename"$BAMEXT
         java -Xmx"$memory_format" -jar $PICARD_jar MarkDuplicates I="$BAMBAIDIR/tmp/$bamsorted" \
             O="$BAMBAIDIR/$bamdedupl" \
             M="$BAMBAIDIR/metrics/$samplename.dd.stats" \

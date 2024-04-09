@@ -2,7 +2,7 @@
 #Full pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
 binversion="0.0.6"
-binrealversion="0.0.9"
+binrealversion="0.0.10"
 
 ##############################OPTIONS##############################
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }

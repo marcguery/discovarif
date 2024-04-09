@@ -80,7 +80,7 @@ echo "Dealing with ${TUMOR[@]}..."
 if [ ! -f "$DELLYDIR"/delly-$variant.bcf ];then
     echo "Doing $variant call..."
     $DELLY call -t "$variant" -g "$genome" "${TUMOR[@]}" "${CTRL[@]}" \
-        -o "$DELLYDIR"/delly-$variant.bcf
+        -c 15 -m 15 -n 50 -q 30 -r 30 -o "$DELLYDIR"/delly-$variant.bcf
 fi
 if [ ! -f "$DELLYDIR"/delly-$variant-filter.bcf ];then
     echo "Doing variant filtering..."
