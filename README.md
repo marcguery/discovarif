@@ -1,6 +1,6 @@
 # discovarif
 
-Starting with paired reads, this pipeline will filter reads and get variants such as:
+Starting with paired reads, this pipeline will filter reads, map them to a reference genome and get variants such as:
 
 - SNPs and small INDELS
 - CNVs
@@ -14,19 +14,34 @@ The main script is launched with the command
 ./bin/discovarif.sh -h
 ```
 
-The different options available will let you select which step of the pipeline to run, the location of the configuration file and the number of processors to use. All the options can be combined.
+```bash
+./bin/discovarif.sh usage:
+        q) # Launch quality step
+        m) # Launch mapping step
+        s) # Launch SNP/small INDEL step
+        c) # Launch CNV step
+        o) # Launch other variants step
+        k) # Use this configuration file
+        n) # Process this number of samples in parallel (default 1)
+        u) # Launch this number of processes per sample (default 1)
+        g) # Use this much RAM (default 4G)
+        d) # Path to discovarif 'src' scripts (auto-detect if unset)
+        h | *) # Show help
+```
+
+The different options available will let you select which step of the pipeline to run, the location of the configuration file and the number of processors to use. All the options can be combined such as several steps of the pipeline can be run one after the other in a single command.
 
 ## Tutorial
 
 To check if you can run the pipeline, run the command:
 
 ```bash
-./bin/discovarif.sh -b
+./bin/discovarif.sh -k config/config-template.sh
 ```
 
-Check the output of this command to see if you have successfully installed all the required tools.
-
 ### `Config` file
+
+The previous command might have indicated that some tools are not available or that required files or folders do not exist. This file is used by the pipeline to indicate the path to necessary tools or the location of reads or genome related files.
 
 First, copy the template *config-template.sh* and create your own config file.
 
@@ -54,30 +69,13 @@ After the launch of the pipeline, the remaining samples to be processed (*keep* 
 
 ### Run
 
-Now that when you have your own config file and your samples file, you can run the pipeline (Filtering step) using the command:
+Now that when you have your own config file and your samples file, you can run the pipeline ([Filtering step](#filt)) using the command:
 
 ```bash
 ./bin/discovarif.sh -k config/config.sh -q
 ```
 
 ## Pipeline
-
-The available commands are printed with the *-h* option:
-
-```bash
-./bin/discovarif.sh usage:
-        b) # Launch test step.
-        q) # Launch quality step.
-        m) # Launch mapping step.
-        s) # Launch SNP/small INDEL step.
-        c) # Launch CNV step.
-        o) # Launch other variants step.
-        k) # Use this configuration file
-        n) # Process this number of samples in parallel
-        u) # Launch this number of processes per sample
-        g) # Use this much RAM (default 4G)
-        h | *) # Show help.
-```
 
 Here are quickly described the steps you can launch :
 
@@ -218,7 +216,7 @@ We tested this pipeline using the programs/inputs described below:
 | [bcftools](https://samtools.github.io/bcftools/bcftools.html) | 1.10.2                                                       | Extract DELLY variant files |
 | [alfred](https://github.com/tobiasrausch/alfred)             | 0.2.6                                                        | Mapping statistics          |
 | [GATK](https://gatk.broadinstitute.org/hc/en-us)             | 4.2.0.0                                                      | Getting SNPs/small INDELs   |
-| [varif](https://github.com/marcguery/varif)                  | 0.3.3                                                        | Filtering SNPs/small INDELs |
+| [varif](https://github.com/marcguery/varif)                  | 0.4.1                                                        | Filtering SNPs/small INDELs |
 | [bedtools](https://bedtools.readthedocs.io/en/latest/content/bedtools-suite.html) | 2.26.0                                                       | Filtering CNVs              |
 | [bedGraphToBigWig](https://github.com/ENCODE-DCC/kentUtils)  | 4                                                            | Compressing bed files       |
 | [DELLY](https://github.com/dellytools/delly)                 | 1.1.6                                                        | Filtering other variants    |

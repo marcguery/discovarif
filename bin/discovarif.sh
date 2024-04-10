@@ -2,11 +2,11 @@
 #Full pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
 binversion="0.0.6"
-binrealversion="0.0.11"
+binrealversion="0.0.12"
 
 ##############################OPTIONS##############################
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
-declare -i doTes=0
+declare -i doTes=1
 declare -i doQua=0
 declare -i doMap=0
 declare -i doSnp=0
@@ -16,28 +16,25 @@ declare -i samplesperrun=1
 declare -i threadspersample=1
 declare -i tot_memory=4000000000
 declare -i dry=0
-while getopts ":bqmscok:n:u:g:d:h" o; do
+while getopts ":qmscok:n:u:g:d:h" o; do
     case "${o}" in
-        b) # Launch test step.
-            doTes=1
-            ;;
-        q) # Launch quality step.
+        q) # Launch quality step
             doQua=1
             dry=1
             ;;
-        m) # Launch mapping step.
+        m) # Launch mapping step
             doMap=1
             dry=1
             ;;
-        s) # Launch SNP/small INDEL step.
+        s) # Launch SNP/small INDEL step
             doSnp=1
             dry=1
             ;;
-        c) # Launch CNV step.
+        c) # Launch CNV step
             doCnv=1
             dry=1
             ;;
-        o) # Launch other variants step.
+        o) # Launch other variants step
             doOth=1
             dry=1
             ;;
@@ -56,7 +53,7 @@ while getopts ":bqmscok:n:u:g:d:h" o; do
         d) # Path to discovarif 'src' scripts (auto-detect if unset)
             LOC="$OPTARG"
             ;;
-        h | *) # Show help.
+        h | *) # Show help
             usage
             ;;
     esac
@@ -65,6 +62,22 @@ shift $((OPTIND-1))
 
 #######Global configuration#######
 echo "discovarif version $binrealversion, global version $binversion"
+
+if [ -z "$configfile" -o ! -f "$configfile" ];then
+        echo "You should provide a config file with -k option and fill it accordingly"
+        echo "Check in 'config' folder for a template"
+        exit 1
+fi 
+
+##Run the config file
+source "$configfile"
+[ ! "$binversion" == "$configversion" ] && { 
+    echo "Version of the config file ($configversion)"\
+    " is not compatible with the global version ($binversion)"
+    exit 1
+}
+##
+
 ##############
 
 #######Check and format cores and RAM#######
@@ -129,22 +142,8 @@ fi
 ##############
 
 ##############Set up##############
+
 if [ $dry -eq 1 ];then
-    if [ -z "$configfile" -o ! -f "$configfile" ];then
-        echo "You should provide a config file with -k option and fill it accordingly"
-        echo "Check in config folder for a template"
-        exit 1
-    fi 
-
-    ##Run the config file
-    source "$configfile"
-
-    [ ! "$binversion" == "$configversion" ] && { 
-        echo "Version of the config file ($configversion)"\
-        " is not compatible with the global version ($binversion)"
-        exit 1
-    }
-    ##
 
     ##Copy files if required by config
     if [ ! -z "$REMOTEADDRESS" ];then
@@ -191,7 +190,9 @@ fi
 if [ $doTes -eq 1 ];then
 
     echo "Testing each tool..."
-    toolok=0
+    allok=1
+    toolok=1
+    fileok=1
     tools=("$FASTQC --version" "java -jar $TRIMMOMATIC_jar PE -version" \
     $BWA "$SAMTOOLS --version" \
     "$BCFTOOLS --version" "$VARIF --version" \
@@ -200,25 +201,33 @@ if [ $doTes -eq 1 ];then
 
     for ((i=0;i<${#tools[@]};i++));do
         ${tools[$i]} &> /dev/null
-        [ "$?" -eq 127 ] && { toolok=1; \
+        [ "$?" -eq 127 ] && { toolok=0; allok=0;\
                                 echo "Command ${tools[$i]} not found"; \
                                 echo "Check the executable path in the config file"; }
     done
-    [ $toolok -eq 0 ] && echo "All tools are successfully installed!"
+    [ $toolok -eq 1 ] && echo "All tools are successfully installed!"
 
-    
     if [ -z "$REMOTEADDRESS" -o ! -z "$REMOTEADDRESS" -a $dry -eq 1 ];then
-        echo "Testing raw data files"
-        [ -d $DATADIR ] ||      echo "The folder DATADIR ($DATADIR) does not exist"
-        [ -f $GENOME ] ||       echo "The file GENOME ($GENOME) does not exist"
-        [ -f $INFOGENOME ] ||   echo "The file INFOGENOME ($INFOGENOME) does not exist"
-        [ -f $GFF ] ||          echo "The file GFF ($GFF) does not exist"
-        [ -f $SAMPLEFILE ] ||   echo "The file SAMPLEFILE ($SAMPLEFILE) does not exist"
-        [ -d $READDIR ] ||      echo "The folder READDIR ($READDIR) does not exist"
-        [ -f $CLIPS ] ||        echo "The file CLIPS ($CLIPS) does not exist"
-        [ -d $OUTDIR ] ||       echo "The folder OUTDIR ($OUTDIR) does not exist"
+        echo "Testing raw data files and folders location..."
+        filelist=("$DATADIR" "$GENOME" "$GFF" "$SAMPLEFILE" "$READDIR" "$CLIPS" "$OUTDIR")
+        filetype=("d" "f" "f" "f" "d" "f" "d")
 
+        for ((i=0;i<${#filelist[@]};i++));do
+            if [ ! -"${filetype[$i]}" "${filelist[$i]}" ];then
+                fileok=0
+                allok=0
+                echo "The file or directory ${filelist[$i]} does not exist"
+            fi
+        done
+    else
+        fileok=0
+        echo "Files and folders are located on a remote server ($REMOTEADDRESS)"
+        echo "Cannot test locations without running one step of the pipeline"
+        exit 1
     fi
+    [ $fileok -eq 1 ] && echo "All files and folders were found!"
+    [ $allok -eq 1 ] && { echo "Config file is properly configured!"; } || \
+        { echo "Config file is not properly configured"; exit 1; }
 fi
 ########
 
