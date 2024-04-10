@@ -2,7 +2,7 @@
 #Full pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
 binversion="0.0.6"
-binrealversion="0.0.10"
+binrealversion="0.0.11"
 
 ##############################OPTIONS##############################
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
@@ -16,7 +16,7 @@ declare -i samplesperrun=1
 declare -i threadspersample=1
 declare -i tot_memory=4000000000
 declare -i dry=0
-while getopts ":bqmscok:n:u:g:h" o; do
+while getopts ":bqmscok:n:u:g:d:h" o; do
     case "${o}" in
         b) # Launch test step.
             doTes=1
@@ -44,15 +44,18 @@ while getopts ":bqmscok:n:u:g:h" o; do
         k) # Use this configuration file
             configfile="$OPTARG"
             ;;
-        n) # Process this number of samples in parallel
+        n) # Process this number of samples in parallel (default 1)
             samplesperrun=$((OPTARG))
             ;;
-        u) # Launch this number of processes per sample
+        u) # Launch this number of processes per sample (default 1)
             threadspersample=$((OPTARG))
             ;;
         g) # Use this much RAM (default 4G)
             tot_memory=$(($(numfmt --from=si "$OPTARG")))
-            ;; 
+            ;;
+        d) # Path to discovarif 'src' scripts (auto-detect if unset)
+            LOC="$OPTARG"
+            ;;
         h | *) # Show help.
             usage
             ;;
@@ -60,6 +63,14 @@ while getopts ":bqmscok:n:u:g:h" o; do
 done
 shift $((OPTIND-1))
 
+#######Global configuration#######
+echo "discovarif version $binrealversion, global version $binversion"
+##############
+
+#######Check and format cores and RAM#######
+#Upper limit of RAM requested
+[ $tot_memory -gt 1000000000000000 ] && { tot_memory=1000000000000000; }
+#Convert memory to human readable format
 bitsToHumanReadable() {
     local i=${1:-0} s=0 S=("" "K" "M" "G" "T")
     while ((i > 1000 && s < ${#S[@]}-1)); do
@@ -69,22 +80,55 @@ bitsToHumanReadable() {
     echo "$i${S[$s]}"
 }
 
-[ $tot_memory -gt 1000000000000000 ] && { tot_memory=1000000000000000; }
 tot_memory_format=$(bitsToHumanReadable $tot_memory)
 
-#######Find the paths to discovarif scripts#######
-if [[ $SLURM_JOBID =~ ^[0-9]+$ ]] ; then
-    LOC=($(echo "$(scontrol show job $SLURM_JOBID | awk -F= '/Command=/{print $2}')"))
-    LOC=$(dirname "${LOC[0]}")
+#Halts discovarif if Slurm configuration is invalid
+if [[ $SLURM_JOBID =~ ^[0-9]+$ ]];then
     [ $SLURM_CPUS_ON_NODE -lt $((threadspersample*samplesperrun)) ] && {
         echo "Requested $((threadspersample*samplesperrun))"\
         "cores in total but allocated only $SLURM_CPUS_ON_NODE,"\
         "check your slurm configuration"; exit 1; }
-else
-    LOC=$(dirname "$(realpath $0)")
 fi
 ##############
 
+#######Find the paths to discovarif scripts#######
+declare -i user_input=1
+##Set path using calling script when no 'src' directory is set
+if [ -z "$LOC" ];then
+    user_input=0
+    LOC="$(dirname "$0")"
+    #Special case when discovarif is called from Slurm
+    if [[ $SLURM_JOBID =~ ^[0-9]+$ && ! -f "$LOC"/discovarif.sh ]];then
+        LOC=($(echo "$(scontrol show job $SLURM_JOBID | awk -F= '/Command=/{print $2}')"))
+        LOC=$(dirname "${LOC[0]}")
+    fi
+    LOC="$LOC/../src/"
+fi
+LOC="$(realpath "$LOC")"
+##
+
+##Check if src files exist
+if [ ! -f "$LOC"/remotecopy.sh -o ! -f "$LOC"/mapper-caller.sh -o \
+    ! -f "$LOC"/get-coverage.sh -o ! -f "$LOC"/CNV-caller.R -o \
+    ! -f "$LOC"/DELLY-caller.sh ];then
+    if [ $user_input -eq 0 ];then
+        echo "Auto-detected path '$LOC' does not contain all discovarif scripts"
+        echo "Try setting a path using '-d'"
+    else
+        echo "User-provided path '$LOC' does not contain all discovarif scripts"
+        echo "Try unsetting '-d' option to let discovarif auto-detect the path"
+    fi
+    exit 1
+else
+    if [ $user_input -eq 0 ];then
+        echo "Auto-detected path: $LOC"
+    else
+        echo "User-provided path: $LOC"
+    fi
+fi
+##############
+
+##############Set up##############
 if [ $dry -eq 1 ];then
     if [ -z "$configfile" -o ! -f "$configfile" ];then
         echo "You should provide a config file with -k option and fill it accordingly"
@@ -92,22 +136,23 @@ if [ $dry -eq 1 ];then
         exit 1
     fi 
 
-    #######Run the config file
+    ##Run the config file
     source "$configfile"
 
     [ ! "$binversion" == "$configversion" ] && { 
         echo "Version of the config file ($configversion)"\
-        " does not match the one this pipeline ($binversion)"
+        " is not compatible with the global version ($binversion)"
         exit 1
     }
-    ##############
+    ##
 
-    #######Copy files if required by config
+    ##Copy files if required by config
     if [ ! -z "$REMOTEADDRESS" ];then
-        "$LOC"/../src/remotecopy.sh
+        "$LOC"/remotecopy.sh
     fi
+    ##
 
-    #######Check integrity
+    ##Check integrity
     [ ! -f "$SAMPLEFILE" ] && { echo "Sample file $SAMPLEFILE does not exist"; SAMPLENUM=0; exit 1; }
     newsamplefilename="$(basename "${SAMPLEFILE%.*}".run."${SAMPLEFILE##*.}")"
     head -n1 $SAMPLEFILE > "$(dirname $SAMPLEFILE)/$newsamplefilename"
@@ -126,7 +171,7 @@ if [ $dry -eq 1 ];then
     #Groups
     Groups=($(cut -f4 $SAMPLEFILE | tail -n+2 | sort | uniq))
 
-    ##############
+    ##
 
     [ $samplesperrun -gt $SAMPLENUM ] && { samplesperrun=$SAMPLENUM; }
     mempersample=$(($tot_memory/$samplesperrun))
@@ -136,7 +181,7 @@ if [ $dry -eq 1 ];then
 
     echo "Samples are: ${SAMPLES[@]}"
 fi
-
+############################
 
 ##############################-------##############################
 
@@ -183,7 +228,7 @@ if [ $doQua -eq 1 ];then
 
     seq -s " " 0 $(($SAMPLENUM-1)) | \
         xargs -d ' ' -n1 -P $samplesperrun bash -c \
-        "$LOC"'/../src/mapper-caller.sh -q -s $1 -t '$threadspersample' -g '$mempersample bash
+        "$LOC"'/mapper-caller.sh -q -s $1 -t '$threadspersample' -g '$mempersample bash
     wait
     echo "Done the Quality step!"
 fi
@@ -196,7 +241,7 @@ if [ $doMap -eq 1 ];then
 
     seq -s " " 0 $(($SAMPLENUM-1)) | \
         xargs -d ' ' -n1 -P $samplesperrun bash -c \
-        "$LOC"'/../src/mapper-caller.sh -m -s $1 -t '$threadspersample' -g '$mempersample bash
+        "$LOC"'/mapper-caller.sh -m -s $1 -t '$threadspersample' -g '$mempersample bash
     wait
     echo "Done the Mapping step!"
 fi
@@ -218,7 +263,7 @@ if [ $doSnp -eq 1 ];then
 
     seq -s " " 0 $(($SAMPLENUM-1)) | \
         xargs -d ' ' -n1 -P $samplesperrun bash -c \
-        "$LOC"'/../src/mapper-caller.sh -v -s $1 -t '$threadspersample' -g '$mempersample bash
+        "$LOC"'/mapper-caller.sh -v -s $1 -t '$threadspersample' -g '$mempersample bash
     wait
     echo "Done the variant step for each sample!"
 
@@ -351,13 +396,13 @@ if [ $doCnv -eq 1 ];then
     ##Obtaining cov files
     seq -s " " 0 $(($SAMPLENUM-1)) | \
         xargs -d ' ' -n1 -P $samplesperrun bash -c \
-        "$LOC"'/../src/get-coverage.sh -s $1' bash
+        "$LOC"'/get-coverage.sh -s $1' bash
     wait
     
     ##Getting filtered CNVs
     mkdir -p "$CNVDIR"/summary
     CONTROLSAMPLES=($(awk '$4=="control" { print $1 }' $SAMPLEFILE))
-    "$LOC"/../src/CNV-caller.R -indir="$CNVDIR" -incoveragepattern="-perbasecds-core.coverage" \
+    "$LOC"/CNV-caller.R -indir="$CNVDIR" -incoveragepattern="-perbasecds-core.coverage" \
         -outdir="$CNVDIR"/summary -outcovpattern="-core-cov.tsv" \
         -outsummary="CNV_withoutAPI-MT.csv" -controlsamples="$(echo "${CONTROLSAMPLES[@]}")" \
         -ratiotumor="0.5" -ratiocontrol="0.5"
@@ -386,7 +431,7 @@ if [ $doOth -eq 1 ];then
     echo -n "${VARIANTS[@]}" | \
         xargs -d ' ' -n1 -P $samplesperrun bash -c \
             '$1 -t "$2" -g "$3" -b "$4" -s "$5" -c "$6" -u "$7" ' \
-        bash "$LOC/../src/DELLY-caller.sh" $dellythreads "$GENOME" "${dellysamples}" "$(echo ${TUMORBAMFILES[@]})" "$(echo ${CONTROLBAMFILES[@]})"
+        bash "$LOC"/DELLY-caller.sh $dellythreads "$GENOME" "${dellysamples}" "$(echo ${TUMORBAMFILES[@]})" "$(echo ${CONTROLBAMFILES[@]})"
     wait
     
     echo "Merging files..."
