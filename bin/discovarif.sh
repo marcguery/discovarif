@@ -1,8 +1,8 @@
 #!/bin/bash
 #Full pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
-binversion="0.0.6"
-binrealversion="0.0.12"
+binversion="0.0.7"
+binrealversion="0.0.13"
 
 ##############################OPTIONS##############################
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
@@ -193,11 +193,12 @@ if [ $doTes -eq 1 ];then
     allok=1
     toolok=1
     fileok=1
-    tools=("$FASTQC --version" "java -jar $TRIMMOMATIC_jar PE -version" \
+    tools=("$FASTQC --version" "$BBDUK -version" \
     $BWA "$SAMTOOLS --version" \
     "$BCFTOOLS --version" "$VARIF --version" \
     "$BEDTOOLS --version" "$DELLY --version" "$BEDGRAPHTOBIGWIG" \
-    "java -jar $PICARD_jar" "$GATK --version" "$ALFRED --version")
+    "java -jar $PICARD_jar" "$GATK --version" "$ALFRED --version" \
+    "$SEQKIT version")
 
     for ((i=0;i<${#tools[@]};i++));do
         ${tools[$i]} &> /dev/null
@@ -246,6 +247,10 @@ fi
 ####Alignment with each sample####
 if [ $doMap -eq 1 ];then
     echo "Doing the Mapping step for each sample..."
+    export TMPSAM=$(mktemp -d "$TMPSAMDIR"/sam.XXXXXX)
+    trap 'rm -rf -- "$TMPSAM"' EXIT
+    echo "The temporary folder for this mapping run is $TMPSAM"
+
     $BWA index "$GENOME"
 
     seq -s " " 0 $(($SAMPLENUM-1)) | \
@@ -264,10 +269,13 @@ if [ $doSnp -eq 1 ];then
     mkdir -p "$SNPDIR"/varif_output/
     mkdir -p "$GVCFDIR"
 
-    $GATK CreateSequenceDictionary -R $GENOME
+    $GATK --java-options "-Xmx${tot_memory_format}" CreateSequenceDictionary \
+        -R "$GENOME" &>/dev/null
+    
+    $SAMTOOLS faidx "$GENOME"
 
-    export TMPGVCF=$(mktemp -d "$SNPDIR"/_tmp/gvcf.XXXXXX)
-
+    export TMPGVCF=$(mktemp -d "$TMPGVCFDIR"/gvcf.XXXXXX)
+    trap 'rm -rf -- "$TMPGVCF"' EXIT
     echo "The temporary folder for this GATK run is $TMPGVCF"
 
     seq -s " " 0 $(($SAMPLENUM-1)) | \
@@ -349,6 +357,7 @@ if [ $doSnp -eq 1 ];then
     fi    
 
     varifsamples=$(mktemp varif-samples.XXXXXX.tsv)
+    echo "The temporary file for this varif run is $OUTDIR/${varifsamples}"
     awk -v OFS=$'\t' '{print ($4,$1,"0","0","other","0")}' $SAMPLEFILE | tail -n+2 > "$OUTDIR/${varifsamples}"
 
     echo "${altreflist[@]}" | \
@@ -425,6 +434,8 @@ if [ $doOth -eq 1 ];then
     echo "Doing the Other variants step..."
     mkdir -p "$DELLYDIR"
     dellysamples=$(mktemp "$OUTDIR/"delly-samples.XXXXXX.tsv)
+    echo "The temporary file for this DELLY run is $dellysamples"
+
     awk '{if ($4==0) ($4 = "control"); else ($4 = "tumor"); print ($1,$4)}' $SAMPLEFILE | tail -n+2 > "${dellysamples}"
     CONTROLSAMPLES=($(tail -n+2 $SAMPLEFILE | awk '$4=="0" { print $1 }' $SAMPLEFILE))
     CONTROLBAMFILES=($(echo "$(printf $BAMBAIDIR/'%s'$BAMEXT'\n' "${CONTROLSAMPLES[@]}")"))

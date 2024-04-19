@@ -1,8 +1,8 @@
 #!/bin/bash
 #Config for pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
-configversion="0.0.6"
-configrealversion="0.0.5"
+configversion="0.0.7"
+configrealversion="0.0.6"
 
 ##############################PARAMETERS##############################
 #Fill the TOBEFILLED parts 
@@ -45,10 +45,14 @@ export TRIMEXT=".paired.gz"
 #BAM files and their indexes
 export BAMBAIDIR="$OUTDIR"/bambai
 export BAMEXT=".dd.sorted.bam"
+#Intermediate mapping files location (will be deleted at the end of the run)
+export TMPSAMDIR="$BAMBAIDIR"/_tmp
 #Variant files
 export VARIANTDIR="$OUTDIR"/variants
 #SNP/small INDEL directory
 export SNPDIR="$VARIANTDIR"/SNPs-sINDELs
+#Intermediate GVCF files location (will be deleted at the end of the run)
+export TMPGVCFDIR="$SNPDIR"/_tmp
 #GATK's GVCFs that were successfully created
 export GVCFDIR="$SNPDIR"/gvcf
 #CNV directory
@@ -62,6 +66,7 @@ export DELLYDIR="$VARIANTDIR"/Others
 # Provide the path to all executables
 
 export FASTQC=fastqc
+export BBDUK=bbduk.sh
 export BWA=bwa
 export SAMTOOLS=samtools
 export BCFTOOLS=bcftools
@@ -71,9 +76,9 @@ export BEDTOOLS=bedtools
 export DELLY=delly
 export BEDGRAPHTOBIGWIG=bedGraphToBigWig
 export GATK=gatk
+export SEQKIT=seqkit
 
 # Provide the path to all JAR files
-export TRIMMOMATIC_jar=/usr/share/java/trimmomatic.jar
 export PICARD_jar=/usr/share/java/picard.jar
 
 ##############################-----##############################

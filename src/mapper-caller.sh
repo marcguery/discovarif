@@ -73,7 +73,7 @@ echo "Processing sample indices $startSample to $(($endSample-1))"
 ##############################-------##############################
 
 ##############################PIPELINE##############################
-##Data quality with FASTQC/TRIMMOMATIC
+##Data quality with FASTQC/BBDUK
 if [ $doQual -eq 1 ];then
     echo "QUALITY step"
     mkdir -p "$QUALDIR"
@@ -92,11 +92,13 @@ if [ $doQual -eq 1 ];then
         $FASTQC -o "$QUALDIR" -t $threads "$r1" "$r2"
 
         ##Read trimming
-        java -Xmx"$memory_format" -jar $TRIMMOMATIC_jar PE -threads $threads -trimlog "$TRIMDIR/log.txt" "$r1" "$r2" \
-        "$TRIMDIR/$r1name".paired.gz "$TRIMDIR/$r1name".unpaired.gz \
-        "$TRIMDIR/$r2name".paired.gz "$TRIMDIR/$r2name".unpaired.gz \
-        ILLUMINACLIP:$CLIPS:2:30:10 \
-        LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:50
+        $BBDUK -Xmx"$memory_format" threads=$threads \
+            in="$r1" in2="$r2" ref=$CLIPS \
+            out="$TRIMDIR/$r1name".paired.gz out2="$TRIMDIR/$r2name".paired.gz \
+            outm="$TRIMDIR/$r1name".unpaired.gz outm2="$TRIMDIR/$r2name".unpaired.gz \
+            stats="$TRIMDIR/bbduk-stats.txt" \
+            k=20 hdist=1 ktrim=r mink=10 qtrim=rl trimq=10 \
+            minlength=30 minavgquality=20 minoverlap=14 tbo tpe
 
         ##Quality trimmed reads
         $FASTQC -o "$QUALDIR" -t $threads \
@@ -109,7 +111,6 @@ fi
 if [ $doMapp -eq 1 ];then
     echo "MAPPING step"
     mkdir -p "$BAMBAIDIR"
-    mkdir -p "$BAMBAIDIR/tmp/sam/"
     mkdir -p "$BAMBAIDIR/metrics"
     
     for ((i = $startSample ; i < $endSample ; i++ ));do
@@ -132,19 +133,19 @@ if [ $doMapp -eq 1 ];then
         echo "Processing sample ${SAMPLES[$i]}..."
         sam="$samplename".sam
         $BWA mem -t $threads "$GENOME" "$r1" "$r2" | \
-        $SAMTOOLS addreplacerg -@ $(($threads-1)) -r "ID:${SAMPLES[$i]}" -r "SM:$samplename" - > "$BAMBAIDIR/tmp/sam/$sam"
+        $SAMTOOLS addreplacerg -@ $(($threads-1)) -r "ID:${SAMPLES[$i]}" -r "SM:$samplename" - > "$TMPSAM/$sam"
 
         ##Converting SAM to BAM
         bam="$samplename".bam
-        $SAMTOOLS view -@ $(($threads-1)) -S -b "$BAMBAIDIR/tmp/sam/$sam" > "$BAMBAIDIR/tmp/$bam"
+        $SAMTOOLS view -@ $(($threads-1)) -S -b "$TMPSAM/$sam" > "$TMPSAM/$bam"
 
         ##Sorting BAM
         bamsorted="$samplename".sorted.bam
-        $SAMTOOLS sort -@ $(($threads-1)) "$BAMBAIDIR/tmp/$bam" -o "$BAMBAIDIR/tmp/$bamsorted"
+        $SAMTOOLS sort -@ $(($threads-1)) "$TMPSAM/$bam" -o "$TMPSAM/$bamsorted"
 
         ##Removing duplicates
         bamdedupl="$samplename"$BAMEXT
-        java -Xmx"$memory_format" -jar $PICARD_jar MarkDuplicates I="$BAMBAIDIR/tmp/$bamsorted" \
+        java -Xmx"$memory_format" -jar $PICARD_jar MarkDuplicates I="$TMPSAM/$bamsorted" \
             O="$BAMBAIDIR/$bamdedupl" \
             M="$BAMBAIDIR/metrics/$samplename.dd.stats" \
             REMOVE_DUPLICATES=true
@@ -156,9 +157,9 @@ if [ $doMapp -eq 1 ];then
             -o "$BAMBAIDIR/metrics/${samplename}-qc.tsv.gz" "$BAMBAIDIR/$bamdedupl"
 
         ##Removing tmp files
-        [ -f "$BAMBAIDIR/$bamdedupl".bai ] && \
-            rm "$BAMBAIDIR/tmp/sam/$sam" "$BAMBAIDIR/tmp/$bam" "$BAMBAIDIR/tmp/$bamsorted" || \
-            echo "Could not remove tmp files because index file $BAMBAIDIR/$bamdedupl.bai does not exist"
+        [ -s "$BAMBAIDIR/$bamdedupl".bai -a -s "$TMPSAM/$bamsorted" ] && \
+            rm "$TMPSAM/$sam" "$TMPSAM/$bam" || \
+            echo "Could not remove tmp files because file $BAMBAIDIR/$bamdedupl.bai or $TMPSAM/$bamsorted don't exist or are empty"
     done
 fi
 
@@ -171,7 +172,7 @@ if [ $doVari -eq 1 ];then
         samplename=${SAMPLES[$i]}
         
         bamdedupl="$samplename"$BAMEXT
-        gatkbam="$samplename".gatk.bam
+        genomepartsdir="$TMPGVCF/genomeparts"
         gvcf="$samplename".g.vcf.gz
 
         if [ -f $GVCFDIR/$gvcf -a -f $GVCFDIR/$gvcf.tbi ];then
@@ -179,14 +180,44 @@ if [ $doVari -eq 1 ];then
             continue
         fi
 
-        $GATK --java-options "-Xmx${memory_format}" HaplotypeCaller \
-            -R $GENOME \
-            -I "$BAMBAIDIR/$bamdedupl" \
-            -O "$TMPGVCF/$gvcf" \
-            -ERC GVCF \
-            --sample-ploidy $(($PLOIDY)) \
-            -bamout "$BAMBAIDIR/$gatkbam"
+        parts=$((threads/4))
 
+        if [ $parts -lt 1 ];then
+            parts=1
+        fi
+        if [ ! -d "$genomepartsdir/$parts" ];then
+            echo "Splitting genome into $parts parts"
+            mkdir -p "$genomepartsdir/$parts"
+            $SEQKIT split2 -j $threads -p $parts $GENOME -O "$genomepartsdir/$parts"
+            for genomepart in $(ls -1 "$genomepartsdir/$parts/"*.fasta);do
+                $SEQKIT fx2tab -j $threads -ni "$genomepart" > "$genomepart".list
+                rm "$genomepart"
+            done
+        fi
+
+        partnumber=0
+        for genomepart in $(ls -1 "$genomepartsdir/$parts/"*.list);do
+            partnumber=$((partnumber+1))
+
+            partgvcf="$samplename"-$partnumber.g.vcf.gz
+            partgatkbam="$samplename"-$partnumber.gatk.bam
+
+            { $GATK --java-options "-Xmx${memory_format}" HaplotypeCaller \
+                --native-pair-hmm-threads 4 \
+                -R "$GENOME" \
+                -L "$genomepart" \
+                -I "$BAMBAIDIR/$bamdedupl" \
+                -O "$TMPGVCF/$partgvcf" \
+                -ERC GVCF \
+                --sample-ploidy $(($PLOIDY)) \
+                -bamout "$BAMBAIDIR/$partgatkbam"; } &
+        done
+        wait
+
+        java -Xmx"$memory_format" -jar $PICARD_jar MergeVcfs \
+            I=<(ls -1 $TMPGVCF/"$samplename"-*.g.vcf.gz) \
+            O="$TMPGVCF/$gvcf"
+        
         if [ -f $TMPGVCF/$gvcf -a -f "$TMPGVCF/$gvcf.tbi" ];then
             echo "Variant calling complete for sample $samplename, saving in $GVCFDIR"
             cp "$TMPGVCF/$gvcf" "$GVCFDIR/$gvcf"
