@@ -25,7 +25,7 @@ while getopts ":hs:e:" o; do
 done
 shift $((OPTIND-1))
 [ -z $endSample ] && { endSample=$(($startSample+1)); }
-[ $startSample -ge $endSample -o $endSample -gt $SAMPLENUM ] \
+[ $startSample -ge $endSample ] || [ $endSample -gt $SAMPLENUM ] \
 && { 
     echo "The indices $startSample:$endSample  provided do not match the $SAMPLENUM samples."\
     " Indices should be between 0 and $SAMPLENUM,"\
@@ -55,7 +55,7 @@ for ((i = $startSample ; i < $endSample ; i++ ));do
         $BEDTOOLS coverage -a "$CNVDIR"/view/cds-core.bed -b "$bamsorted" -d > "$CNVDIR/$samplename"-perbasecds-core.coverage
     fi
     
-    if [ ! -f "$CNVDIR"/view/"$samplename"-perbase.bed -a ! -f "$CNVDIR"/view/"$samplename"-perbase.bg ];then
+    if [ ! -f "$CNVDIR"/view/"$samplename"-perbase.bed ] && [ ! -f "$CNVDIR"/view/"$samplename"-perbase.bg ];then
         echo "Creating whole perbase file..."
         $BEDTOOLS genomecov -ibam "$bamsorted" -g "$CNVDIR"/chrom.sizes -d > "$CNVDIR"/view/"$samplename"-perbase.bed
     fi
@@ -95,7 +95,9 @@ for ((i = $startSample ; i < $endSample ; i++ ));do
         awk '{start=$2-1} { printf("%s\t%s\t%i\t%s\n",$1,start,$2,$3); }' "$CNVDIR"/view/"$samplename"-perbaseinter.bed > "$CNVDIR"/view/"$samplename"-perbaseinter.bg
     fi
     
-    if [ -f "$CNVDIR"/view/"$samplename"-perbase.bed -a -f "$CNVDIR"/view/"$samplename"-perbasecds.bed -a -f "$CNVDIR"/view/"$samplename"-perbaseinter.bed ];then
+    if [ -f "$CNVDIR"/view/"$samplename"-perbase.bed ] && \
+        [ -f "$CNVDIR"/view/"$samplename"-perbasecds.bed ] && \
+        [ -f "$CNVDIR"/view/"$samplename"-perbaseinter.bed ];then
         echo "Removing unecessary files..."
         rm "$CNVDIR"/view/"$samplename"-perbase.bed
     fi

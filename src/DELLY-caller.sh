@@ -48,7 +48,7 @@ while getopts ":s:c:b:g:u:t:m:a:r:v:d:" o; do
     esac
 done
 shift $((OPTIND-1))
-[ -z "$controls" -o -z "$samples" -o -z "$dellysamples" -o -z "$genome" -o -z "$variant" ] && { echo "Missing arguments, aborting..."; \
+[ -z "$controls" ] || [ -z "$samples" ] || [ -z "$dellysamples" ] || [ -z "$genome" ] || [ -z "$variant" ] && { echo "Missing arguments, aborting..."; \
     echo "Arguments were: -s $samples / -c $controls / -b $dellysamples / -g $genome / -u $variant / -t $maxthreads / -m $minsize / -a $altaf / -r $ratiogeno / -v $coverage / -d $controlcontamination"; \
     usage; }
 #####################################################################

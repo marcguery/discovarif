@@ -2,7 +2,7 @@
 #Full pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
 binversion="0.0.7"
-binrealversion="0.0.13"
+binrealversion="0.0.14"
 
 ##############################OPTIONS##############################
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
@@ -63,7 +63,7 @@ shift $((OPTIND-1))
 #######Global configuration#######
 echo "discovarif version $binrealversion, global version $binversion"
 
-if [ -z "$configfile" -o ! -f "$configfile" ];then
+if [ -z "$configfile" ] || [ ! -f "$configfile" ];then
         echo "You should provide a config file with -k option and fill it accordingly"
         echo "Check in 'config' folder for a template"
         exit 1
@@ -71,7 +71,7 @@ fi
 
 ##Run the config file
 source "$configfile"
-[ ! "$binversion" == "$configversion" ] && { 
+[ ! "$binversion" = "$configversion" ] && { 
     echo "Version of the config file ($configversion)"\
     " is not compatible with the global version ($binversion)"
     exit 1
@@ -121,9 +121,9 @@ LOC="$(realpath "$LOC")"
 ##
 
 ##Check if src files exist
-if [ ! -f "$LOC"/remotecopy.sh -o ! -f "$LOC"/mapper-caller.sh -o \
-    ! -f "$LOC"/get-coverage.sh -o ! -f "$LOC"/CNV-caller.R -o \
-    ! -f "$LOC"/DELLY-caller.sh ];then
+if [ ! -f "$LOC"/remotecopy.sh ] || [ ! -f "$LOC"/mapper-caller.sh ] || \
+   [ ! -f "$LOC"/get-coverage.sh ] || [ ! -f "$LOC"/CNV-caller.R ] || \
+   [ ! -f "$LOC"/DELLY-caller.sh ];then
     if [ $user_input -eq 0 ];then
         echo "Auto-detected path '$LOC' does not contain all discovarif scripts"
         echo "Try setting a path using '-d'"
@@ -208,7 +208,7 @@ if [ $doTes -eq 1 ];then
     done
     [ $toolok -eq 1 ] && echo "All tools are successfully installed!"
 
-    if [ -z "$REMOTEADDRESS" -o ! -z "$REMOTEADDRESS" -a $dry -eq 1 ];then
+    if [ -z "$REMOTEADDRESS" ] || { [ ! -z "$REMOTEADDRESS" ] && [ $dry -eq 1 ]; };then
         echo "Testing raw data files and folders location..."
         filelist=("$DATADIR" "$GENOME" "$GFF" "$SAMPLEFILE" "$READDIR" "$CLIPS" "$OUTDIR")
         filetype=("d" "f" "f" "f" "d" "f" "d")
@@ -312,7 +312,7 @@ if [ $doSnp -eq 1 ];then
         samplepresent=1
         indexvcf=0
         #Iterate over all VCF headers to check if the sample is present
-        while [ ! "$sample" == "${allsamples[$indexvcf]}" ]; do
+        while [ ! "$sample" = "${allsamples[$indexvcf]}" ]; do
             ((indexvcf++))
             [ $indexvcf -gt ${#allsamples[@]} ] && { 
                 echo "Sample $sample is not present in any sample from "$SNPDIR"/variants.vcf.gz,"\
@@ -322,10 +322,10 @@ if [ $doSnp -eq 1 ];then
         done
         [ $samplepresent -eq 1 ] && {
             #If group is set and is different from the samplegroup (the current one), ...
-            if [ ! -z "$group" -a "$group" != "$samplegroup" ];then
+            if [ ! -z "$group" ] && [ "$group" != "$samplegroup" ];then
                 #if there is a control group (must be '0') it is the first one
                 # to appear since samples are sorted by their group id
-                [ "$group" == "0" ] && {
+                [ "$group" = "0" ] && {
                     echo "Found control group 0 at columns ${goodindices[@]} of "$SNPDIR"/variants.vcf.gz"
                     controlindices=("${goodindices[@]}")
                 }
@@ -350,42 +350,25 @@ if [ $doSnp -eq 1 ];then
     cut -f 1-9,$(echo "${allgoodindices[@]}" | sed 's/ /,/g') <(gunzip -c "$SNPDIR"/variants.vcf.gz) | gzip -c > "$SNPDIR"/variants-filtered.vcf.gz
 
     echo "Filtering SNPs and INDELs with varif"
-    altreflist=("0.9-0.05" "0.8-0.2" "0.4-0.05")
-    remainingthreads=$(((threadspersample*samplesperrun)-3))
-    if [ $remainingthreads -lt 1 ];then
-        remainingthreads = 1
-    fi    
+    gzip -c "$SNPDIR"/variants-filtered.vcf.gz > "$SNPDIR"/variants-filtered.vcf
 
     varifsamples=$(mktemp varif-samples.XXXXXX.tsv)
     echo "The temporary file for this varif run is $OUTDIR/${varifsamples}"
     awk -v OFS=$'\t' '{print ($4,$1,"0","0","other","0")}' $SAMPLEFILE | tail -n+2 > "$OUTDIR/${varifsamples}"
 
-    echo "${altreflist[@]}" | \
-        xargs -d ' ' -n1 -P $(((threadspersample*samplesperrun)-1)) bash -c \
-            'alt=$(echo $6 | cut -f1 -d"-"); \
-            ref=$(echo $6 | cut -f2 -d"-"); \
-            echo "Launching varif with ALT:REF of $alt:$ref";\
-            $1 -vcf <(gunzip -c "$2"/../variants-filtered.vcf.gz) -gff "$3" -fasta "$4" \
-                -outfilename "$2"/filtered-SNPs-sINDELs-alt${alt}-ref${ref} \
-                --ped "$5" --comparison families \
-                --best-variants --all-regions --depth 5  \
-                --ratio-alt ${alt} --ratio-ref ${ref} \
-                --output-vcf' \
-        bash "$VARIF" "$SNPDIR"/varif_output/ "$GFF" "$GENOME" "$OUTDIR/${varifsamples}" &
+    $VARIF -vcf "$SNPDIR"/variants-filtered.vcf -gff "$GFF" -fasta "$GENOME" \
+            -outfilename "$SNPDIR"/varif_output/filtered-SNPs-sINDELs-alt0.9-ref0.05 \
+            --comparison all \
+            --best-variants --all-regions --depth 5 \
+            --ratio-alt 0.9 --ratio-ref 0.05 --output-vcf \
+            --ncores $((threadspersample*samplesperrun)) --chunk-size 5000
     
-    echo "${altreflist[@]}" | \
-        xargs -d ' ' -n1 -P $((remainingthreads)) bash -c \
-            'alt=$(echo $5 | cut -f1 -d"-"); \
-            ref=$(echo $5 | cut -f2 -d"-"); \
-            echo "Launching varif with ALT:REF of $alt:$ref";\
-            $1 -vcf <(gunzip -c "$2"/../variants-filtered.vcf.gz) -gff "$3" -fasta "$4" \
-                -outfilename "$2"/filtered-SNPs-sINDELs-alt${alt}-ref${ref} \
-                --comparison all \
-                --best-variants --all-regions --depth 5  \
-                --ratio-alt ${alt} --ratio-ref ${ref} \
-                --output-vcf' \
-        bash "$VARIF" "$SNPDIR"/varif_output/ "$GFF" "$GENOME"
-    wait
+    $VARIF -vcf "$SNPDIR"/variants-filtered.vcf -gff "$GFF" -fasta "$GENOME" \
+            -outfilename "$SNPDIR"/varif_output/filtered-SNPs-sINDELs-alt0.9-ref0.05 \
+            --ped "$OUTDIR/${varifsamples}" --comparison families \
+            --best-variants --all-regions --depth 5 \
+            --ratio-alt 0.9 --ratio-ref 0.05 --output-vcf \
+            --ncores $((threadspersample*samplesperrun)) --chunk-size 5000
     
     echo "Done the SNPs/INDELs step!"
 fi
@@ -461,8 +444,9 @@ if [ $doOth -eq 1 ];then
         echo "Cannot merge filtered files from DELLY"
         exit $returnerr
     fi
-    $BCFTOOLS view $(ls -1 "$DELLYDIR"/*-filter.bcf | head -n1) | grep "#" > "$DELLYDIR"/delly-final.vcf
-    for f in $(ls -1 "$DELLYDIR"/*-filter.bcf);do
+    bcffiles=("$DELLYDIR"/*-filter.bcf)
+    $BCFTOOLS view "${bcffiles[0]}" | grep "#" > "$DELLYDIR"/delly-final.vcf
+    for f in "$DELLYDIR"/*-filter.bcf;do
         $BCFTOOLS view "$f" | grep -v "#" >> "$DELLYDIR"/delly-final.vcf
     done
 

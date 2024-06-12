@@ -51,9 +51,9 @@ cp config/config-template.sh config/config.sh
 
 Make sure to provide all the input files and binaries necessary for the pipeline to be launched properly. Only the *TOBEFILLED* parts are required.
 
-To work properly, the pipeline needs raw data files all located in a dedicated folder (see **DATADIR** in the config file).  Similarly, all output files will located in a dedicated folder (**OUTDIR**). You just need to provide the path to this folder as the rest of the file tree will be generated according to the names of the subfolders in the config file.
+To work properly, the pipeline needs raw data files all located in a dedicated folder (see *DATADIR* in the config file).  Similarly, all output files will located in a dedicated folder (*OUTDIR*). You just need to provide the path to this folder as the rest of the file tree will be generated according to the names of the subfolders in the config file.
 
-The entirety of the **DATADIR** and **OUTDIR** folders will be copied to a distant server if you happen to have your files remotely located (in that case files should be located under a dedicated remote folder, **REMOTEDATADIR** and **REMOTEOUTDIR** from the config file).
+The entirety of the *DATADIR* and *OUTDIR* folders will be copied from a distant server if your files are located on a remote server (in that case files should be located under a dedicated remote folder, *REMOTEDATADIR* and *REMOTEOUTDIR* from the config file).
 
 ### `Samples` file
 
@@ -101,9 +101,10 @@ At the end of the pipeline, you should obtain a file tree like this one below:
 ├── out
 │   ├── bambai
 │   │   ├── metrics
-│   │   └── tmp
+│   │   └── _tmp
 │   ├── fastqc
 │   ├── trim
+│   │   └── metrics
 │   └── variants
 │       ├── CNVs
 │       │   ├── view
@@ -116,29 +117,30 @@ At the end of the pipeline, you should obtain a file tree like this one below:
 ```
 
 
-Contents of this file tree are described below.
+Contents of this file tree are described below (with their corresponding variable in the config file).
 
-* **out**: Output directory
-  * **bambai**: BAM files and their indexes (sorted and unsorted)
-    * **metrics**: Statistics about duplicates and BAM quality
-    * **tmp**: Temporary files like SAMs, unsorted BAMs...
-  * **fastqc**: FASTQC files
-  * **trim**: Paired reads after trimming
-  * **variants**: Variants
-  * **CNVs**: CNV variants (CDS, non CDS and whole regions)
-    * **view**: To view CNVs in a browser
-    * **summary**: Filtered CNVs
-  * **Others**: DELLY variants
-  * **SNPs-sINDELs**: GATK variants
-    * **_tmp**: GVCF files that are beeing produced
-    * **varif_output**: Filtered SNPs and INDELs
-    * **gvcf**: Successfully produced GVCF files
+* **out** (*OUTDIR*): Output directory.
+  * **bambai** (*BAMBAIDIR*): Sorted and read-deduplicated BAM files along with their corresponding index. Additionnally, BAM files highlighting variants generated with GATK.
+    * **metrics**: Statistics about duplicates and mapping quality.
+    * **_tmp** (*TMPSAMDIR*): Temporary mapping files such as SAMs, unsorted and sorted BAMs. These files can take a lot of disk space.
+  * **fastqc** (*QUALDIR*): FASTQC files.
+  * **trim **(*TRIMDIR*): Paired reads after trimming.
+    * **metrics**: Statistics about trimming.
+  * **variants** (*VARIANTDIR*): Variants.
+    * **CNVs** (*CNVDIR*): CNV variants (CDS, non CDS and whole regions).
+      * **view**: To view CNVs in a browser.
+      * **summary**: Filtered CNVs.
+    * **Others** (*DELLYDIR*): DELLY variants.
+    * **SNPs-sINDELs** (*SNPDIR*): GATK variants.
+      * **_tmp** (*TMPGVCFDIR*): GVCF files that are beeing produced and partitions of the genome.
+      * **varif_output**: Filtered SNPs and INDELs.
+      * **gvcf** (*GVCFDIR*): Successfully produced GVCF files.
 
 ## <a name="filt"></a>Filtering step
 
 This step is launched with the script `mapper-caller.sh` which can optionally run the trimming (*-q*) step.
 
-With Illumina adapters provided in the `config` file, [trimmomatic](http://www.usadellab.org/cms/?page=trimmomatic) (tested with Trimmomatic v 0.39) will trim the raw reads found in the *reads* folder and output paired and unpaired read files. The paired reads will be the one used for the next steps
+With Illumina adapters provided in the `config` file (*CLIPS*), [bbduk.sh](https://jgi.doe.gov/data-and-tools/software-tools/bbtools/bb-tools-user-guide/bbduk-guide/) (tested with bbduk.sh v 38.87) will trim the raw reads found in the *reads* folder and output paired and unpaired read files. The paired reads will be the one used for the next steps.
 
 Additionally, the quality of raw and trimmed reads will be analysed using [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) (tested with FastQC v 0.10.1).
 
@@ -146,9 +148,9 @@ Additionally, the quality of raw and trimmed reads will be analysed using [FastQ
 
 This step is launched with the script `mapper-caller.sh` which can optionally run the mapping (-*m*) step.
 
-The trimmed paired reads will be mapped on the reference genome (tested with *Plasmodium falciparum* 3D7 v 46 genome) with [bwa](http://bio-bwa.sourceforge.net/bwa.shtml) (tested with bwa v 0.7.17). The output will then be processed by [samtools](http://www.htslib.org/doc/samtools.html) (tested with samtools v 1.10) in order to obtain sorted BAM files. Finally, duplicated reads are removed using [picard](https://broadinstitute.github.io/picard/) (tested with picard v 2.18.25).
+The trimmed paired reads (or if absent the raw reads) will be mapped on the reference genome (tested with *Plasmodium falciparum* 3D7 v 67 genome) with [bwa](http://bio-bwa.sourceforge.net/bwa.shtml) (tested with bwa v 0.7.17). The output will then be processed by [samtools](http://www.htslib.org/doc/samtools.html) (tested with samtools v 1.18) in order to obtain sorted BAM files. Finally, duplicated reads are removed using [picard](https://broadinstitute.github.io/picard/) (tested with picard v 2.25.5).
 
-By default, `mapper-caller.sh` will run the steps on all samples found in the reads directory, but you can subset samples by their index order using *-s*. This is useful especially when you need to parallelize the processes. 
+Intermediate files such as SAM, unsorted and sorted BAM files will be stored in a temporary folder under *TMPSAMDIR* named like `sam.xxxxxx`. After a mapping is complete for a sample, SAM and unsorted BAM files will be deleted to save on disk space. Only the sorted BAM files will remain until the pipeline run ends, which will lead to a removal of this temporary folder.
 
 ## Variant filtering
 
@@ -156,11 +158,11 @@ By default, `mapper-caller.sh` will run the steps on all samples found in the re
 
 This step is first launched with the script `mapper-caller.sh` which can optionally run the variant calling (-*v*) step on each sample:
 
-This option uses [GATK](https://gatk.broadinstitute.org/hc/en-us) HaplotypeCaller (tested with GATK v 4.2.0) on mapped reads to obtain a GVCF file for each sample. The ploidy used by the model must be properly set in the `config` file and is by default equal to 1.  The GVCF files produced by the pipeline will be copied from the temporary folder (`_tmp/gvcf.xxxxxx`) to the GVCFDIR folder provided in the config file. Because this step can be time consuming, whenever the pipeline detects that a sample has already a GVCF file present in the GVCFDIR, this step is skipped for that specific sample.
+This option uses [GATK](https://gatk.broadinstitute.org/hc/en-us) HaplotypeCaller (tested with GATK v 4.2.0.0) on mapped reads to obtain a GVCF file for each sample. The ploidy used by the model must be properly set in the `config` file and is by default equal to 1.  The GVCF files produced by the pipeline will be copied from the temporary folder located under *TMPGVCFDIR* (named like `gvcf.xxxxxx`) to the *GVCFDIR* folder provided in the config file. Because this step can be time consuming, whenever the pipeline detects that a sample has already a GVCF file present in the *GVCFDIR*, this step is skipped for that specific sample.
 
 After the [variant calling](#mappvari)  for each sample has finished, GATK CombineGVCFs will be used to merge all the GVCF and the final variants will be extracted using GATK GenotypeGVCFs.
 
-Then [varif](https://github.com/marcguery/varif) will be used to filter variants based on read depths and ALT allele frequency. A variant is considered available in a sample only if the total read depth is above 5. Several combinations of ALT and REF allele frequencies are used to filter variants for each group as mentioned in the samples file. For example, the ALT allele frequency of at least one sample must be superior to 0.8 while being in the meantime inferior to 0.2 in at least one other sample (`--ratio-alt 0.8 --ratio-ref 0.2`).
+Then, [varif](https://github.com/marcguery/varif) will be used to filter variants based on read depths and ALT allele frequency. A variant is considered available in a sample only if the total read depth is above 5. Several combinations of ALT and REF allele frequencies are used to filter variants for each group as mentioned in the samples file. For example, the ALT allele frequency of at least one sample must be superior to 0.8 while being in the meantime inferior to 0.2 in at least one other sample (`--ratio-alt 0.8 --ratio-ref 0.2`).
 Each  group will be individually filtered by varif with the control group (when a control group is provided in the samples file with samples whose *group* field is equal to 0) or without it.
 
 ### <a name="varicnvs"></a>CNVs
@@ -182,13 +184,7 @@ To find other variants such as big INDELs, duplication, translocation and invers
 ### Multi-threading and memory
 
 You can choose to parallelize the processes to speed up the time required to obtain results. There are two option controlling this: -*n* for choosing the number of samples to run in parallel and -*u* for allocating a number of threads for each sample.
-For example with 8 samples to process, -*n* 8 -*u* 2 will process at the same time all the 8 samples with 2 threads for each of them. 
-
-There are optimal combinations of the -*n* and -*u* at each step to minimize the processing time; with N being equal to `min(number of samples, number of available CPUs)`:
-
-- Filtering step:  ```-n N -u 4``` 
-- Mapping: ```-n N -u 4``` 
-- All variant filtering steps: ```-n N -u 1``` 
+For example with 8 samples to process, `-n 8 -u 2` will process at the same time all the 8 samples with 2 threads for each of them. 
 
 By default, the maximum memory used is 4 G, but you can override this value by using the option -g. The memory requested will be equally shared between samples processed at the same time (-n option). Note that some third-party tools like GATK may require a large amount of RAM which might slow down or even abort a job requesting too much processes to be launched at the same time. In that case you should reduce the number of requested processors or request more memory.
 
@@ -206,22 +202,19 @@ This automatic downloading can be useful especially when the pipeline is launche
 
 We tested this pipeline using the programs/inputs described below:
 
-| Name                                                         | Version                                                      | Usage                       |
-| ------------------------------------------------------------ | ------------------------------------------------------------ | --------------------------- |
-| [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) | 0.10.1                                                       | Viewing quality of reads    |
-| [trimmomatic](http://www.usadellab.org/cms/?page=trimmomatic) | 0.39                                                         | Trimming reads              |
-| [bwa](http://bio-bwa.sourceforge.net/bwa.shtml)              | 0.7.17                                                       | Mapping reads               |
-| [picard](https://broadinstitute.github.io/picard/)           | 2.18.25                                                      | Removing duplicated reads   |
-| [samtools](http://www.htslib.org/doc/samtools.html)          | 1.10                                                         | Produce BAM files           |
-| [bcftools](https://samtools.github.io/bcftools/bcftools.html) | 1.10.2                                                       | Extract DELLY variant files |
-| [alfred](https://github.com/tobiasrausch/alfred)             | 0.2.6                                                        | Mapping statistics          |
-| [GATK](https://gatk.broadinstitute.org/hc/en-us)             | 4.2.0.0                                                      | Getting SNPs/small INDELs   |
-| [varif](https://github.com/marcguery/varif)                  | 0.4.1                                                        | Filtering SNPs/small INDELs |
-| [bedtools](https://bedtools.readthedocs.io/en/latest/content/bedtools-suite.html) | 2.26.0                                                       | Filtering CNVs              |
-| [bedGraphToBigWig](https://github.com/ENCODE-DCC/kentUtils)  | 4                                                            | Compressing bed files       |
-| [DELLY](https://github.com/dellytools/delly)                 | 1.1.6                                                        | Filtering other variants    |
-| 3D7 genome                                                   | 46                                                           | Reference genome            |
-| Core annotation                                              | [2016](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5052046/) | Subseting CNVs              |
-| Resistant samples                                            |                                                              | Variant discovery           |
-| Sensitive sample                                             |                                                              | Control sample              |
-
+| Name                                                         | Version | Usage                       |
+| ------------------------------------------------------------ | ------- | --------------------------- |
+| [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) | 0.11.7  | Viewing quality of reads    |
+| [bbduk.sh](https://jgi.doe.gov/data-and-tools/software-tools/bbtools/bb-tools-user-guide/bbduk-guide/) | 38.87   | Trimming reads              |
+| [bwa](http://bio-bwa.sourceforge.net/bwa.shtml)              | 0.7.17  | Mapping reads               |
+| [picard](https://broadinstitute.github.io/picard/)           | 2.25.5  | Removing duplicated reads   |
+| [samtools](http://www.htslib.org/doc/samtools.html)          | 1.18    | Produce BAM files           |
+| [bcftools](https://samtools.github.io/bcftools/bcftools.html) | 1.18    | Extract DELLY variant files |
+| [alfred](https://github.com/tobiasrausch/alfred)             | 0.2.5   | Mapping statistics          |
+| [GATK](https://gatk.broadinstitute.org/hc/en-us)             | 4.2.0.0 | Getting SNPs/small INDELs   |
+| [varif](https://github.com/marcguery/varif)                  | 0.5.1   | Filtering SNPs/small INDELs |
+| [bedtools](https://bedtools.readthedocs.io/en/latest/content/bedtools-suite.html) | 2.27.1  | Filtering CNVs              |
+| [bedGraphToBigWig](https://github.com/ENCODE-DCC/kentUtils)  | 4       | Compressing bed files       |
+| [DELLY](https://github.com/dellytools/delly)                 | 1.1.6   | Filtering other variants    |
+| 3D7 genome                                                   | 67      | Reference genome            |
+| [Core annotation](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5052046/) | 2016    | Subseting CNVs              |

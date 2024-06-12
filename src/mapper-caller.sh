@@ -52,7 +52,7 @@ while getopts ":qmvhs:e:t:g:" o; do
 done
 shift $((OPTIND-1))
 [ -z $endSample ] && { endSample=$(($startSample+1)); }
-[ $startSample -ge $endSample -o $endSample -gt $SAMPLENUM ] \
+[ $startSample -ge $endSample ] || [ $endSample -gt $SAMPLENUM ] \
 && { 
     echo "The indices $startSample:$endSample  provided do not match the $SAMPLENUM samples."\
     " Indices should be between 0 and $SAMPLENUM,"\
@@ -77,12 +77,12 @@ echo "Processing sample indices $startSample to $(($endSample-1))"
 if [ $doQual -eq 1 ];then
     echo "QUALITY step"
     mkdir -p "$QUALDIR"
-    mkdir -p "$TRIMDIR"
+    mkdir -p "$TRIMDIR/metrics"
 
     for ((i = $startSample ; i < $endSample ; i++ ));do
         r1=${READS1[$i]}
         r2=${READS2[$i]}
-        [ ! -f "$r1" -o ! -f "$r2" ] && \
+        [ ! -f "$r1" ] || [ ! -f "$r2" ] && \
         { echo "At least one read file of sample ${SAMPLES[$i]} does not exist"; continue; }
         r1name=${SAMPLES[$i]}_R1
         r2name=${SAMPLES[$i]}_R2
@@ -96,7 +96,7 @@ if [ $doQual -eq 1 ];then
             in="$r1" in2="$r2" ref=$CLIPS \
             out="$TRIMDIR/$r1name".paired.gz out2="$TRIMDIR/$r2name".paired.gz \
             outm="$TRIMDIR/$r1name".unpaired.gz outm2="$TRIMDIR/$r2name".unpaired.gz \
-            stats="$TRIMDIR/bbduk-stats.txt" \
+            stats="$TRIMDIR/metrics/${SAMPLES[$i]}-bbduk-stats.txt" \
             k=20 hdist=1 ktrim=r mink=10 qtrim=rl trimq=10 \
             minlength=30 minavgquality=20 minoverlap=14 tbo tpe
 
@@ -116,12 +116,12 @@ if [ $doMapp -eq 1 ];then
     for ((i = $startSample ; i < $endSample ; i++ ));do
         r1=${TRIMS1[$i]}
         r2=${TRIMS2[$i]}
-        if [ ! -f "$r1" -o ! -f "$r2" ];then
+        if [ ! -f "$r1" ] || [ ! -f "$r2" ];then
             echo "Cound not find files $r1 and/or $r2"
             echo "At least one trimmed read file of sample ${SAMPLES[$i]} does not exist, trying with read files provided in $SAMPLEFILE..."
             r1=${READS1[$i]}
             r2=${READS2[$i]}
-            if [ ! -f "$r1" -o ! -f "$r2" ];then
+            if [ ! -f "$r1" ] || [ ! -f "$r2" ];then
                 echo "At least one untrimmed read file of sample ${SAMPLES[$i]} does not exist"
                 continue
             else
@@ -157,7 +157,7 @@ if [ $doMapp -eq 1 ];then
             -o "$BAMBAIDIR/metrics/${samplename}-qc.tsv.gz" "$BAMBAIDIR/$bamdedupl"
 
         ##Removing tmp files
-        [ -s "$BAMBAIDIR/$bamdedupl".bai -a -s "$TMPSAM/$bamsorted" ] && \
+        [ -s "$BAMBAIDIR/$bamdedupl".bai ] && [ -s "$TMPSAM/$bamsorted" ] && \
             rm "$TMPSAM/$sam" "$TMPSAM/$bam" || \
             echo "Could not remove tmp files because file $BAMBAIDIR/$bamdedupl.bai or $TMPSAM/$bamsorted don't exist or are empty"
     done
@@ -175,35 +175,40 @@ if [ $doVari -eq 1 ];then
         genomepartsdir="$TMPGVCF/genomeparts"
         gvcf="$samplename".g.vcf.gz
 
-        if [ -f $GVCFDIR/$gvcf -a -f $GVCFDIR/$gvcf.tbi ];then
+        if [ -f $GVCFDIR/$gvcf ] && [ -f $GVCFDIR/$gvcf.tbi ];then
             echo "$GVCFDIR/$gvcf and $GVCFDIR/$gvcf.tbi already exist, skipping variant calling for sample $samplename"
             continue
         fi
 
+        #Partition the genome into parts, each requiring 4 threads
         parts=$((threads/4))
-
+        #If user requested less than 4 threads, 
+        # use them all for the unique HaplotypeCaller process
         if [ $parts -lt 1 ];then
             parts=1
+            gatkhmmthreads=$threads
+        else
+            gatkhmmthreads=4 #use 4 threads for each HaplotypeCaller process
         fi
         if [ ! -d "$genomepartsdir/$parts" ];then
             echo "Splitting genome into $parts parts"
             mkdir -p "$genomepartsdir/$parts"
             $SEQKIT split2 -j $threads -p $parts $GENOME -O "$genomepartsdir/$parts"
-            for genomepart in $(ls -1 "$genomepartsdir/$parts/"*.fasta);do
+            for genomepart in "$genomepartsdir/$parts/"*.fasta;do
                 $SEQKIT fx2tab -j $threads -ni "$genomepart" > "$genomepart".list
                 rm "$genomepart"
             done
         fi
 
         partnumber=0
-        for genomepart in $(ls -1 "$genomepartsdir/$parts/"*.list);do
+        for genomepart in "$genomepartsdir/$parts/"*.list;do
             partnumber=$((partnumber+1))
 
             partgvcf="$samplename"-$partnumber.g.vcf.gz
             partgatkbam="$samplename"-$partnumber.gatk.bam
 
             { $GATK --java-options "-Xmx${memory_format}" HaplotypeCaller \
-                --native-pair-hmm-threads 4 \
+                --native-pair-hmm-threads $gatkhmmthreads \
                 -R "$GENOME" \
                 -L "$genomepart" \
                 -I "$BAMBAIDIR/$bamdedupl" \
@@ -215,10 +220,10 @@ if [ $doVari -eq 1 ];then
         wait
 
         java -Xmx"$memory_format" -jar $PICARD_jar MergeVcfs \
-            I=<(ls -1 $TMPGVCF/"$samplename"-*.g.vcf.gz) \
+            I=<(for i in "$TMPGVCF/$samplename"-*.g.vcf.gz; do echo "$i"; done) \
             O="$TMPGVCF/$gvcf"
         
-        if [ -f $TMPGVCF/$gvcf -a -f "$TMPGVCF/$gvcf.tbi" ];then
+        if [ -f $TMPGVCF/$gvcf ] && [ -f "$TMPGVCF/$gvcf.tbi" ];then
             echo "Variant calling complete for sample $samplename, saving in $GVCFDIR"
             cp "$TMPGVCF/$gvcf" "$GVCFDIR/$gvcf"
             cp "$TMPGVCF/$gvcf.tbi" "$GVCFDIR/$gvcf.tbi"
