@@ -1,8 +1,8 @@
 #!/bin/bash
 #Config for pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
-configversion="0.0.7"
-configrealversion="0.0.6"
+configcompversion="0.0.7"
+configversion="0.0.6"
 
 ##############################PARAMETERS##############################
 #Fill the TOBEFILLED parts 

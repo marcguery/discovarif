@@ -1,8 +1,8 @@
 #!/bin/bash
 #Full pipeline (Wed 30 Sep 11:12:18 CEST 2020)
 
-binversion="0.0.7"
-binrealversion="0.0.14"
+bincompversion="0.0.7"
+binversion="0.0.15"
 
 ##############################OPTIONS##############################
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
@@ -71,9 +71,9 @@ fi
 
 ##Run the config file
 source "$configfile"
-[ ! "$binversion" = "$configversion" ] && { 
-    echo "Version of the config file ($configversion)"\
-    " is not compatible with the global version ($binversion)"
+[ ! "$bincompversion" = "$configcompversion" ] && { 
+    echo "Version of the config file ($configcompversion)"\
+    " is not compatible with the pipeline's version ($bincompversion)"
     exit 1
 }
 ##
@@ -247,6 +247,7 @@ fi
 ####Alignment with each sample####
 if [ $doMap -eq 1 ];then
     echo "Doing the Mapping step for each sample..."
+    mkdir -p "$TMPSAMDIR"
     export TMPSAM=$(mktemp -d "$TMPSAMDIR"/sam.XXXXXX)
     trap 'rm -rf -- "$TMPSAM"' EXIT
     echo "The temporary folder for this mapping run is $TMPSAM"
@@ -264,10 +265,10 @@ fi
 ####SNP/small INDEL filtering####
 if [ $doSnp -eq 1 ];then
     echo "Doing the SNPs/INDELs step..."
-    mkdir -p "$SNPDIR"
     mkdir -p "$SNPDIR"/_tmp/
     mkdir -p "$SNPDIR"/varif_output/
     mkdir -p "$GVCFDIR"
+    mkdir -p "$TMPGVCFDIR"
 
     $GATK --java-options "-Xmx${tot_memory_format}" CreateSequenceDictionary \
         -R "$GENOME" &>/dev/null
@@ -359,14 +360,7 @@ if [ $doSnp -eq 1 ];then
     $VARIF -vcf "$SNPDIR"/variants-filtered.vcf -gff "$GFF" -fasta "$GENOME" \
             -outfilename "$SNPDIR"/varif_output/filtered-SNPs-sINDELs-alt0.9-ref0.05 \
             --comparison all \
-            --best-variants --all-regions --depth 5 \
-            --ratio-alt 0.9 --ratio-ref 0.05 --output-vcf \
-            --ncores $((threadspersample*samplesperrun)) --chunk-size 5000
-    
-    $VARIF -vcf "$SNPDIR"/variants-filtered.vcf -gff "$GFF" -fasta "$GENOME" \
-            -outfilename "$SNPDIR"/varif_output/filtered-SNPs-sINDELs-alt0.9-ref0.05 \
-            --ped "$OUTDIR/${varifsamples}" --comparison families \
-            --best-variants --all-regions --depth 5 \
+            --min-samples-diff 0 --depth 5 \
             --ratio-alt 0.9 --ratio-ref 0.05 --output-vcf \
             --ncores $((threadspersample*samplesperrun)) --chunk-size 5000
     

@@ -69,6 +69,8 @@ bitsToHumanReadable() {
 }
 
 memory_format=$(bitsToHumanReadable $memory)
+memperthread=$(($memory/$threads))
+memory_thread_format=$(bitsToHumanReadable $memperthread)
 echo "Processing sample indices $startSample to $(($endSample-1))"
 ##############################-------##############################
 
@@ -131,17 +133,14 @@ if [ $doMapp -eq 1 ];then
         samplename=${SAMPLES[$i]}
 
         echo "Processing sample ${SAMPLES[$i]}..."
-        sam="$samplename".sam
-        $BWA mem -t $threads "$GENOME" "$r1" "$r2" | \
-        $SAMTOOLS addreplacerg -@ $(($threads-1)) -r "ID:${SAMPLES[$i]}" -r "SM:$samplename" - > "$TMPSAM/$sam"
-
-        ##Converting SAM to BAM
         bam="$samplename".bam
-        $SAMTOOLS view -@ $(($threads-1)) -S -b "$TMPSAM/$sam" > "$TMPSAM/$bam"
+        ##Mapping
+        $BWA mem -t $threads "$GENOME" "$r1" "$r2" | \
+        $SAMTOOLS addreplacerg -@ 0 -O BAM -r "ID:${SAMPLES[$i]}" -r "SM:$samplename" - > "$TMPSAM/$bam"
 
         ##Sorting BAM
         bamsorted="$samplename".sorted.bam
-        $SAMTOOLS sort -@ $(($threads-1)) "$TMPSAM/$bam" -o "$TMPSAM/$bamsorted"
+        $SAMTOOLS sort -@ $(($threads-1)) -m $memory_thread_format "$TMPSAM/$bam" -o "$TMPSAM/$bamsorted"
 
         ##Removing duplicates
         bamdedupl="$samplename"$BAMEXT
@@ -158,7 +157,7 @@ if [ $doMapp -eq 1 ];then
 
         ##Removing tmp files
         [ -s "$BAMBAIDIR/$bamdedupl".bai ] && [ -s "$TMPSAM/$bamsorted" ] && \
-            rm "$TMPSAM/$sam" "$TMPSAM/$bam" || \
+            rm "$TMPSAM/$bam" || \
             echo "Could not remove tmp files because file $BAMBAIDIR/$bamdedupl.bai or $TMPSAM/$bamsorted don't exist or are empty"
     done
 fi
@@ -180,47 +179,87 @@ if [ $doVari -eq 1 ];then
             continue
         fi
 
-        #Partition the genome into parts, each requiring 4 threads
-        parts=$((threads/4))
-        #If user requested less than 4 threads, 
+        #Partition the genome into parts if sufficient threads provided
+        chrs=$(grep ">" "$GENOME" | wc -l)
+        chars=$(grep -v ">" "$GENOME" | wc -m)
+        lines=$(grep -v ">" "$GENOME" | wc -l)
+        chrsize=$((chars-lines))
+        gatkhmmthreads=1 #use this number of threads for each HaplotypeCaller process
+        parts=$((threads/gatkhmmthreads))
+        #If user requested less than "gatkhmmthreads" threads, 
         # use them all for the unique HaplotypeCaller process
-        if [ $parts -lt 1 ];then
+        if [ $parts -lt $gatkhmmthreads ];then
             parts=1
             gatkhmmthreads=$threads
-        else
-            gatkhmmthreads=4 #use 4 threads for each HaplotypeCaller process
         fi
+
+        mem_gatk=$(($memory/$parts))
+        mem_gatk_format=$(bitsToHumanReadable $mem_gatk)
+        
         if [ ! -d "$genomepartsdir/$parts" ];then
             echo "Splitting genome into $parts parts"
             mkdir -p "$genomepartsdir/$parts"
-            $SEQKIT split2 -j $threads -p $parts $GENOME -O "$genomepartsdir/$parts"
-            for genomepart in "$genomepartsdir/$parts/"*.fasta;do
-                $SEQKIT fx2tab -j $threads -ni "$genomepart" > "$genomepart".list
-                rm "$genomepart"
+            $SEQKIT sliding -j $threads -g -s $((chrsize/parts)) -W $((chrsize/parts)) "$GENOME" -o "$genomepartsdir/$parts/sliding-windows.fasta"
+            grep ">" "$genomepartsdir/$parts/sliding-windows.fasta" | cut -c2- | \
+                awk -F":" -v OFS=":" '{split($2,a,"-"); print (substr($1, 1, length($1)-8), $2, a[2]-a[1])}' | sort -r -t ":" -k3 -n | \
+                cut -d":" -f1,2 > "$genomepartsdir/$parts/sliding-windows.list"
+            winnum=$(wc -l "$genomepartsdir/$parts/sliding-windows.list" | cut -f1 -d" ")
+
+            if [ $parts -gt $winnum ];then
+                parts=$winnum
+            fi
+
+            for ((partnumber=1; partnumber<$parts; partnumber++));do
+                head -n $partnumber "$genomepartsdir/$parts/sliding-windows.list" | tail -n 1 > "$genomepartsdir/$parts/sliding-windows-${partnumber}.list" 
             done
+
+            if [ $winnum -ge $parts ];then
+                tail -n+$parts "$genomepartsdir/$parts/sliding-windows.list" > "$genomepartsdir/$parts/sliding-windows-${parts}.list"
+                finalbinsize=$(cut -f2 -d":" "$genomepartsdir/$parts/sliding-windows-${parts}.list" | awk -F"-" '{ print $2 - $1 }' | paste -sd+ | bc)
+                finalbinsurplus=$((finalbinsize/(chrsize/parts)))
+                segments=$(wc -l "$genomepartsdir/$parts/sliding-windows-${parts}.list" | cut -f1 -d" ")
+                if [ $finalbinsurplus -gt 1 ] && [ $segments -gt 1 ];then
+                    skip=$((segments/finalbinsurplus))
+                    headskip=$((skip-skip/2))
+                    tailskip=$((skip/2))
+                    head -n$headskip "$genomepartsdir/$parts/sliding-windows-${parts}.list" > "$genomepartsdir/$parts/sliding-windows-${parts}.tmp.list"
+                    tail -n$tailskip "$genomepartsdir/$parts/sliding-windows-${parts}.list" >> "$genomepartsdir/$parts/sliding-windows-${parts}.tmp.list"
+                    
+                    for ((i=1;i<=$((segments-(skip)));i++));do
+                        if [ ! -f "$genomepartsdir/$parts/sliding-windows-$((parts-i)).list" ];then
+                            tail -n+$((headskip+i)) "$genomepartsdir/$parts/sliding-windows-${parts}.list" | \
+                            head -n 1 >> "$genomepartsdir/$parts/sliding-windows-${parts}.tmp.list"
+                        fi
+                        tail -n+$((headskip+i)) "$genomepartsdir/$parts/sliding-windows-${parts}.list" | \
+                            head -n 1 >> "$genomepartsdir/$parts/sliding-windows-$((parts-i)).list" 
+                    done
+                    mv "$genomepartsdir/$parts/sliding-windows-${parts}.tmp.list" "$genomepartsdir/$parts/sliding-windows-${parts}.list"
+                fi
+            fi
         fi
 
-        partnumber=0
-        for genomepart in "$genomepartsdir/$parts/"*.list;do
-            partnumber=$((partnumber+1))
+
+        for ((partnumber=0; partnumber<=$parts; partnumber++));do
 
             partgvcf="$samplename"-$partnumber.g.vcf.gz
             partgatkbam="$samplename"-$partnumber.gatk.bam
 
-            { $GATK --java-options "-Xmx${memory_format}" HaplotypeCaller \
+            { $GATK --java-options "-Xmx${mem_gatk_format}" HaplotypeCaller \
                 --native-pair-hmm-threads $gatkhmmthreads \
                 -R "$GENOME" \
-                -L "$genomepart" \
+                -L "$genomepartsdir/$parts/sliding-windows-${partnumber}.list" \
                 -I "$BAMBAIDIR/$bamdedupl" \
                 -O "$TMPGVCF/$partgvcf" \
                 -ERC GVCF \
                 --sample-ploidy $(($PLOIDY)) \
                 -bamout "$BAMBAIDIR/$partgatkbam"; } &
         done
-        wait
+        wait        
+
+        vcftomerge="$(for i in "$TMPGVCF/$samplename"-*.g.vcf.gz;do if [ -f "$i.tbi" ];then echo -n " " "I=$i"; fi; done)"
 
         java -Xmx"$memory_format" -jar $PICARD_jar MergeVcfs \
-            I=<(for i in "$TMPGVCF/$samplename"-*.g.vcf.gz; do echo "$i"; done) \
+            $vcftomerge \
             O="$TMPGVCF/$gvcf"
         
         if [ -f $TMPGVCF/$gvcf ] && [ -f "$TMPGVCF/$gvcf.tbi" ];then
